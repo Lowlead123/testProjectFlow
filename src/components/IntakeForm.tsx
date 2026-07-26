@@ -58,7 +58,8 @@ export default function IntakeForm({
   // Vitals & Physical Exam
   const [weight, setWeight] = useState<number | ''>('');
   const [height, setHeight] = useState<number | ''>('');
-  const [bloodPressure, setBloodPressure] = useState('');
+  const [bpSystolic, setBpSystolic] = useState('');
+  const [bpDiastolic, setBpDiastolic] = useState('');
   const [pulseRate, setPulseRate] = useState<number | ''>('');
   
   // Pre-registered list UI
@@ -170,7 +171,14 @@ export default function IntakeForm({
     if (p.gender) setGender(p.gender as any);
     if (p.weight) setWeight(p.weight);
     if (p.height) setHeight(p.height);
-    if (p.bloodPressure) setBloodPressure(p.bloodPressure);
+    if (p.bloodPressure) {
+      const parts = p.bloodPressure.split('/');
+      setBpSystolic(parts[0] ? parts[0].trim() : '');
+      setBpDiastolic(parts[1] ? parts[1].trim() : '');
+    } else {
+      setBpSystolic('');
+      setBpDiastolic('');
+    }
     if (p.pulseRate) setPulseRate(p.pulseRate);
     
     // Services
@@ -279,6 +287,10 @@ export default function IntakeForm({
     const year = new Date().getFullYear() + 543;
     const generatedHn = selectedHn || `HN-${year.toString().slice(2)}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const formattedBp = (bpSystolic.trim() || bpDiastolic.trim())
+      ? `${bpSystolic.trim()}${bpDiastolic.trim() ? '/' + bpDiastolic.trim() : ''}`
+      : undefined;
+
     onAddPatient({
       hn: generatedHn,
       citizenId: citizenId.replace(/\D/g, ''),
@@ -290,7 +302,7 @@ export default function IntakeForm({
       height: rawHeight,
       bmi: bmiCalc?.bmi,
       bmiCategory: bmiCalc?.category,
-      bloodPressure: bloodPressure.trim() || undefined,
+      bloodPressure: formattedBp,
       pulseRate: pulseRate !== '' ? Number(pulseRate) : undefined,
       currentStepId: secondStep, // Move directly to 2nd station (e.g. OPD room / triage)
       status: 'waiting',
@@ -308,7 +320,8 @@ export default function IntakeForm({
     setGender('ชาย');
     setWeight('');
     setHeight('');
-    setBloodPressure('');
+    setBpSystolic('');
+    setBpDiastolic('');
     setPulseRate('');
     setSelectedServices([]);
     setQuickNotes('');
@@ -721,17 +734,33 @@ export default function IntakeForm({
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 ความดันโลหิต (mmHg)
               </label>
-              <div className="relative">
-                <Activity className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="เช่น 127/78"
-                  value={bloodPressure}
-                  onChange={(e) => setBloodPressure(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 focus:border-sky-500 bg-white text-xs font-mono font-bold transition-all outline-none"
-                />
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Activity className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="number"
+                    placeholder="127"
+                    value={bpSystolic}
+                    onChange={(e) => setBpSystolic(e.target.value)}
+                    className="w-full pl-7 pr-1 py-2 rounded-xl border border-slate-300 focus:border-sky-500 bg-white text-xs font-mono font-bold transition-all outline-none text-center"
+                  />
+                </div>
+                <span className="text-sm font-bold text-slate-400 select-none">/</span>
+                <div className="relative flex-1">
+                  <input
+                    type="number"
+                    placeholder="67"
+                    value={bpDiastolic}
+                    onChange={(e) => setBpDiastolic(e.target.value)}
+                    className="w-full px-2 py-2 rounded-xl border border-slate-300 focus:border-sky-500 bg-white text-xs font-mono font-bold transition-all outline-none text-center"
+                  />
+                </div>
               </div>
-              <span className="text-[9px] text-slate-400 font-mono">SYS / DIA (เช่น 120/80)</span>
+              <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono mt-1 px-1">
+                <span>SYS (ตัวบน)</span>
+                <span>/</span>
+                <span>DIA (ตัวล่าง)</span>
+              </div>
             </div>
 
             {/* Pulse Rate */}
