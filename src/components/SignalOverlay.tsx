@@ -386,10 +386,6 @@ export default function SignalOverlay({
     if (!overlayConfig) return true;
 
     const firstStepId = workflowSteps[0]?.id;
-    const isOpdFilter =
-      stationFilter === 'opdStatus' ||
-      stationFilter === 'all' ||
-      (firstStepId && stationFilter === firstStepId);
 
     // Resolve station key from step if stationFilter is a step ID
     const stepIdx = workflowSteps.findIndex((s) => s.id === stationFilter);
@@ -415,17 +411,19 @@ export default function SignalOverlay({
       }
     }
 
-    // Default permissions per station key
+    const isOpdFilter = stationFilter === 'opdStatus' || (firstStepId && stationFilter === firstStepId) || stationKey === 'opdStatus';
+
+    // Default permissions per station key: EACH STATION CAN ONLY MODIFY/CANCEL ITS OWN STATION SIGNAL!
     const defaultPerms =
       stationKey === 'opdStatus' || isOpdFilter
-        ? ['opdStatus', 'labStatus', 'procedureStatus', 'requestedServices', 'quickNotes']
+        ? ['opdStatus', 'requestedServices', 'quickNotes']
         : stationKey === 'labStatus'
-        ? ['labStatus', 'rightsStatus', 'requestedServices', 'quickNotes']
+        ? ['labStatus', 'requestedServices', 'quickNotes']
         : stationKey === 'procedureStatus'
-        ? ['procedureStatus', 'rightsStatus', 'requestedServices', 'quickNotes']
+        ? ['procedureStatus', 'requestedServices', 'quickNotes']
         : stationKey === 'rightsStatus'
         ? ['rightsStatus', 'requestedServices', 'quickNotes']
-        : ['opdStatus', 'labStatus', 'procedureStatus', 'rightsStatus', 'requestedServices', 'quickNotes'];
+        : [stationKey, 'requestedServices', 'quickNotes'];
 
     // Check custom permissions in overlayConfig
     const configuredPerms =
@@ -459,42 +457,43 @@ export default function SignalOverlay({
       }
     }
 
-    // Always allow if filtering by all stations, or matching station/action IDs or resolved keys
-    if (
-      stationFilter === 'all' ||
-      stationFilter === actionId ||
-      stationFilter === actionKey ||
-      stationKey === actionId ||
-      stationKey === actionKey ||
-      (isOpdFilter && (actionId === 'opdStatus' || actionKey === 'opdStatus' || actionId === firstStepId))
-    ) {
-      return true;
+    if (actionId === 'requestedServices' || actionId === 'quickNotes') {
+      return allowedList.includes(actionId);
     }
 
-    // Requested services and quick notes are always allowed for OPD station
-    if (isOpdFilter && (actionId === 'requestedServices' || actionId === 'quickNotes')) {
-      return true;
+    // When filtering by a specific station tab (not 'all'), check strictly if target action matches THIS station
+    if (stationFilter !== 'all') {
+      const isSelfStation =
+        stationFilter === actionId ||
+        stationFilter === actionKey ||
+        stationKey === actionId ||
+        stationKey === actionKey ||
+        (isOpdFilter && (actionId === 'opdStatus' || actionKey === 'opdStatus' || actionId === firstStepId)) ||
+        (step && (actionId === step.id || actionKey === step.id));
+
+      if (isSelfStation) return true;
+
+      // If custom permissions were configured in Settings, check allowedList
+      if (configuredPerms && configuredPerms.length > 0) {
+        return allowedList.includes(actionId) || allowedList.includes(actionKey) || (actionStep && allowedList.includes(actionStep.id));
+      }
+
+      return false; // Strictly disallow modifying or cancelling other station signals!
     }
 
-    // Check if explicitly allowed in allowedList
+    // If stationFilter === 'all':
+    if (overlayConfig?.allowedStationButtons && overlayConfig.allowedStationButtons.length > 0) {
+      return overlayConfig.allowedStationButtons.includes(actionId) || overlayConfig.allowedStationButtons.includes(actionKey);
+    }
+
     const isExplicitlyInList =
       allowedList.includes(actionId) ||
       allowedList.includes(actionKey) ||
       (actionStep && allowedList.includes(actionStep.id));
 
-    if (isExplicitlyInList) {
-      return true;
-    }
+    if (isExplicitlyInList) return true;
 
     if (actionId === 'rightsStatus' || actionKey === 'rightsStatus') {
-      const stationConfigured =
-        overlayConfig.stationPermissions?.[stationFilter] ||
-        overlayConfig.stationPermissions?.[stationKey] ||
-        (step ? overlayConfig.stationPermissions?.[step.id] : null);
-
-      if (stationConfigured && stationConfigured.length > 0) {
-        return stationConfigured.includes('rightsStatus') || stationConfigured.includes('rights');
-      }
       return isAuthorizedToCloseRights();
     }
 
@@ -568,7 +567,7 @@ export default function SignalOverlay({
   const handleCloseRightsAndAdvance = (patient: Patient, stepId?: string) => {
     const targetAction = stepId || 'rightsStatus';
     if (!isActionAllowedForStation(targetAction) && !isActionAllowedForStation('rightsStatus')) {
-      alert(`🔒 สิทธิ์ถูกจำกัด\nแผนกที่คุณเลือกอยู่ไม่ได้ถูกตั้งค่าให้กด "ปิดสิทธิ์การรักษา"\n(คุณสามารถปรับสิทธิ์ปุ่มกดของแต่ละแผนกได้ในเมนู Settings)`);
+      alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
       return;
     }
 
@@ -578,6 +577,7 @@ export default function SignalOverlay({
       }
     } else {
       onToggleSignal(patient.id, (stepId || 'rightsStatus') as any, 'closed');
+      setSelectedPatientId(null);
     }
   };
 
@@ -911,6 +911,9 @@ export default function SignalOverlay({
                     const nextVal = isDone ? 'pending' : (activeStationObj.key === 'procedureStatus' ? 'sent' : 'opened');
                     if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, activeStationObj.key as any)) return;
                     onToggleSignal(currentPatient.id, (stepId || activeStationObj.key) as any, nextVal);
+                    if (nextVal !== 'pending') {
+                      setSelectedPatientId(null);
+                    }
                   }
                 };
 
@@ -959,7 +962,7 @@ export default function SignalOverlay({
 
                   const handleClick = () => {
                     if (!isAllowed) {
-                      alert(`🔒 สิทธิ์ถูกจำกัด\nแผนกที่คุณเลือกอยู่ไม่ได้ถูกตั้งค่าให้ส่งสัญญาณ "${st.fullName}"\n(สามารถปรับสิทธิ์ได้ใน Settings)`);
+                      alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
                       return;
                     }
 
@@ -969,6 +972,9 @@ export default function SignalOverlay({
                       const nextVal = isDone ? 'pending' : (st.key === 'procedureStatus' ? 'sent' : 'opened');
                       if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, st.key as any)) return;
                       onToggleSignal(currentPatient.id, (stepId || st.key) as any, nextVal);
+                      if (nextVal !== 'pending') {
+                        setSelectedPatientId(null);
+                      }
                     }
                   };
 
@@ -1032,10 +1038,10 @@ export default function SignalOverlay({
                   placeholder="พิมพ์ข้อความส่งซิกด่วน..."
                   defaultValue={currentPatient.quickNotes || ''}
                   key={currentPatient.id + '_notes_' + (currentPatient.quickNotes || '')}
-                  onBlur={(e) => onUpdateNotes(currentPatient.id, e.target.value)}
+                  onBlur={(e) => onUpdateQuickNotes(currentPatient.id, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      onUpdateNotes(currentPatient.id, e.currentTarget.value);
+                      onUpdateQuickNotes(currentPatient.id, e.currentTarget.value);
                       e.currentTarget.blur();
                     }
                   }}
@@ -1072,8 +1078,13 @@ export default function SignalOverlay({
               {isButtonEnabled('opdStatus') && (
                 <button
                   onClick={() => {
+                    if (!isActionAllowedForStation('opdStatus')) {
+                      alert('🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น');
+                      return;
+                    }
                     const next = opdFirstPatient.opdStatus === 'opened' ? 'pending' : 'opened';
                     onToggleSignal(opdFirstPatient.id, 'opdStatus', next);
+                    if (next !== 'pending') setSelectedPatientId(null);
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
                     opdFirstPatient.opdStatus === 'opened' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1086,8 +1097,13 @@ export default function SignalOverlay({
               {isButtonEnabled('labStatus') && (
                 <button
                   onClick={() => {
+                    if (!isActionAllowedForStation('labStatus')) {
+                      alert('🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น');
+                      return;
+                    }
                     const next = opdFirstPatient.labStatus === 'opened' ? 'pending' : 'opened';
                     onToggleSignal(opdFirstPatient.id, 'labStatus', next);
+                    if (next !== 'pending') setSelectedPatientId(null);
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
                     opdFirstPatient.labStatus === 'opened' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1100,8 +1116,13 @@ export default function SignalOverlay({
               {isButtonEnabled('procedureStatus') && (
                 <button
                   onClick={() => {
+                    if (!isActionAllowedForStation('procedureStatus')) {
+                      alert('🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น');
+                      return;
+                    }
                     const next = opdFirstPatient.procedureStatus === 'sent' ? 'pending' : 'sent';
                     onToggleSignal(opdFirstPatient.id, 'procedureStatus', next);
+                    if (next !== 'pending') setSelectedPatientId(null);
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
                     opdFirstPatient.procedureStatus === 'sent' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1697,12 +1718,20 @@ export default function SignalOverlay({
                           const isDone = isStationDoneForPatient(currentPatient, activeStationObj.key) || isStationDoneForPatient(currentPatient, stepId);
 
                           const handlePrimaryClick = () => {
+                            if (!isActionAllowedForStation(activeStationObj.key) && (!step || !isActionAllowedForStation(step.id))) {
+                              alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
+                              return;
+                            }
+
                             if (activeStationObj.key === 'rightsStatus' || step?.actionType === 'close_rights_discharge') {
                               handleCloseRightsAndAdvance(currentPatient, stepId);
                             } else {
                               const nextVal = isDone ? 'pending' : (activeStationObj.key === 'procedureStatus' ? 'sent' : 'opened');
                               if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, activeStationObj.key as any)) return;
                               onToggleSignal(currentPatient.id, (stepId || activeStationObj.key) as any, nextVal);
+                              if (nextVal !== 'pending') {
+                                setSelectedPatientId(null);
+                              }
                             }
                           };
 
@@ -1894,7 +1923,7 @@ export default function SignalOverlay({
 
                               const handleClick = () => {
                                 if (!isAllowed) {
-                                  alert(`🔒 สิทธิ์ถูกจำกัด\nแผนกที่คุณเลือกอยู่ไม่ได้ถูกตั้งค่าให้ส่งสัญญาณ "${st.fullName}"\n(คุณสามารถปรับสิทธิ์ปุ่มกดแยกตามแผนกได้ในเมนู Settings)`);
+                                  alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
                                   return;
                                 }
 
@@ -1914,6 +1943,9 @@ export default function SignalOverlay({
                                 } else {
                                   const nextVal = isDone ? 'pending' : (st.key === 'procedureStatus' ? 'sent' : 'opened');
                                   onToggleSignal(currentPatient.id, (step?.id || st.key) as any, nextVal);
+                                  if (nextVal !== 'pending') {
+                                    setSelectedPatientId(null);
+                                  }
                                 }
                               };
 

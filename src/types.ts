@@ -75,6 +75,7 @@ export interface OverlayConfig {
   stationPrerequisites?: Record<string, string[]>; // Mapping of stepId -> array of required prerequisite step IDs
   actionTypes?: Record<string, 'step_complete' | 'close_rights_discharge'>; // Mapping of stepId -> role type
   enabledSignalButtons?: string[];
+  allowedStationButtons?: string[];
 }
 
 export interface PreRegisteredPatient {
