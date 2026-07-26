@@ -30,7 +30,8 @@ import {
   FileText,
   Users,
   Check,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 
 interface SignalOverlayProps {
