@@ -1,0 +1,8 @@
+{
+  "name": "Copy of OPD Workflow Sync",
+  "description": "ระบบจัดการเวิร์กโฟลว์คนไข้ OPD แบบเรียลไทม์ สื่อสารกันในทีมพร้อมป๊อปอัพแจ้งเตือนและระบบฐานข้อมูลสำหรับบันทึกข้อมูลคนไข้",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

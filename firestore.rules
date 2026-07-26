@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function to validate Patient structure
+    function isValidPatient(patient) {
+      return patient.id is string
+        && patient.hn is string
+        && patient.citizenId is string
+        && patient.name is string
+        && patient.name.size() > 0
+        && patient.rights is string
+        && (patient.age is int || patient.age is number)
+        && patient.age >= 0
+        && patient.currentStepId is string
+        && patient.status in ['waiting', 'processing', 'completed']
+        && patient.createdAt is string
+        && patient.updatedAt is string
+        && (!('history' in patient) || patient.history is list)
+        && (!('requestedServices' in patient) || patient.requestedServices is list)
+        && (!('opdStatus' in patient) || patient.opdStatus is string)
+        && (!('labStatus' in patient) || patient.labStatus is string)
+        && (!('procedureStatus' in patient) || patient.procedureStatus is string)
+        && (!('rightsStatus' in patient) || patient.rightsStatus is string)
+        && (!('quickNotes' in patient) || patient.quickNotes is string);
+    }
+
+    // Helper function to validate WorkflowStep structure
+    function isValidWorkflowStep(step) {
+      return step.id is string
+        && step.name is string
+        && step.name.size() > 0
+        && step.description is string
+        && step.color is string
+        && (step.order is int || step.order is number)
+        && (!('allowedActions' in step) || step.allowedActions is list);
+    }
+
+    // Helper function to validate PreRegisteredPatient structure
+    function isValidPreRegisteredPatient(patient) {
+      return patient.id is string
+        && patient.hn is string
+        && patient.citizenId is string
+        && patient.name is string
+        && patient.name.size() > 0
+        && patient.rights is string
+        && patient.age is int
+        && patient.age >= 0
+        && patient.createdAt is string
+        && patient.updatedAt is string
+        && (!('plannedServices' in patient) || patient.plannedServices is list)
+        && (!('notes' in patient) || patient.notes is string);
+    }
+
+    // Rules for patients collection
+    match /patients/{patientId} {
+      allow read: if true;
+      allow create, update: if isValidPatient(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Rules for preRegisteredPatients collection
+    match /preRegisteredPatients/{patientId} {
+      allow read: if true;
+      allow create, update: if isValidPreRegisteredPatient(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Rules for workflowSteps collection
+    match /workflowSteps/{stepId} {
+      allow read: if true;
+      allow create, update: if isValidWorkflowStep(request.resource.data);
+      allow delete: if true;
+    }
+
+    // Rules for availableServices collection
+    match /availableServices/{serviceId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.id is string && request.resource.data.name is string;
+      allow delete: if true;
+    }
+
+    // Rules for appSettings collection
+    match /appSettings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "Patient": {
+      "title": "Patient",
+      "description": "Active OPD patient in queue workflow",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "hn": { "type": "string" },
+        "citizenId": { "type": "string" },
+        "name": { "type": "string" },
+        "rights": { "type": "string" },
+        "age": { "type": "integer" },
+        "currentStepId": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "requestedServices": { "type": "array" },
+        "opdStatus": { "type": "string" },
+        "labStatus": { "type": "string" },
+        "procedureStatus": { "type": "string" },
+        "rightsStatus": { "type": "string" },
+        "quickNotes": { "type": "string" }
+      },
+      "required": ["id", "hn", "citizenId", "name", "rights", "age", "currentStepId", "status", "createdAt", "updatedAt"]
+    },
+    "PreRegisteredPatient": {
+      "title": "PreRegisteredPatient",
+      "description": "Pre-registered patient record prior to OPD opening",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "hn": { "type": "string" },
+        "citizenId": { "type": "string" },
+        "name": { "type": "string" },
+        "rights": { "type": "string" },
+        "age": { "type": "integer" },
+        "plannedServices": { "type": "array" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "hn", "citizenId", "name", "rights", "age", "createdAt", "updatedAt"]
+    },
+    "WorkflowStep": {
+      "title": "WorkflowStep",
+      "description": "OPD queue station step",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" },
+        "order": { "type": "integer" }
+      },
+      "required": ["id", "name", "description", "color", "order"]
+    },
+    "ServiceTag": {
+      "title": "ServiceTag",
+      "description": "Available medical service tag",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    }
+  },
+  "firestore": {
+    "/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Active patients in queue"
+    },
+    "/preRegisteredPatients/{patientId}": {
+      "schema": "PreRegisteredPatient",
+      "description": "Directory of pre-registered patients"
+    },
+    "/workflowSteps/{stepId}": {
+      "schema": "WorkflowStep",
+      "description": "Queue station steps configuration"
+    },
+    "/availableServices/{serviceId}": {
+      "schema": "ServiceTag",
+      "description": "Available clinical signal service tags"
+    }
+  }
+}
