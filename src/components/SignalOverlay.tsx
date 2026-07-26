@@ -167,21 +167,26 @@ export default function SignalOverlay({
     }
 
     if (key === 'opdStatus') {
+      if (patient.opdStatus === 'pending' || (patient as any)[stationKey] === 'pending') return false;
       return patient.opdStatus === 'opened' || (patient as any)[stationKey] === 'opened' || (patient.history || []).some(h => h.stepId === stationKey || h.stepId === 'opdStatus' || h.stepId === 'step_1');
     }
     if (key === 'labStatus') {
+      if (patient.labStatus === 'pending' || (patient as any)[stationKey] === 'pending') return false;
       return patient.labStatus === 'opened' || patient.labStatus === 'done' || (patient as any)[stationKey] === 'opened' || (patient as any)[stationKey] === 'done' || (patient.history || []).some(h => h.stepId === stationKey || h.stepId === 'labStatus' || h.stepId === 'step_2');
     }
     if (key === 'procedureStatus') {
+      if (patient.procedureStatus === 'pending' || (patient as any)[stationKey] === 'pending') return false;
       return patient.procedureStatus === 'sent' || patient.procedureStatus === 'done' || (patient as any)[stationKey] === 'sent' || (patient as any)[stationKey] === 'done' || (patient.history || []).some(h => h.stepId === stationKey || h.stepId === 'procedureStatus' || h.stepId === 'step_3');
     }
     if (key === 'rightsStatus') {
+      if (patient.rightsStatus === 'pending' || (patient as any)[stationKey] === 'pending') return false;
       return patient.rightsStatus === 'closed' || (patient as any)[stationKey] === 'closed' || (patient.history || []).some(h => h.stepId === stationKey || h.stepId === 'rightsStatus' || h.stepId === 'step_4');
     }
 
+    const rawVal = (patient as any)[stationKey];
+    if (rawVal === 'pending') return false;
     const history = patient.history || [];
     const isLogged = history.some((h) => h.stepId === stationKey);
-    const rawVal = (patient as any)[stationKey];
     const isRawDone = rawVal === 'opened' || rawVal === 'done' || rawVal === 'closed' || rawVal === 'sent';
 
     return isLogged || isRawDone;
@@ -855,6 +860,71 @@ export default function SignalOverlay({
           </div>
         </div>
 
+        {/* Search Bar in PiP */}
+        <div className="space-y-1">
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="🔍 เสิร์ช HN / เลขบัตร / ชื่อ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white placeholder:text-slate-500 outline-none focus:border-amber-500 font-sans"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Search Dropdown in PiP Mode */}
+          {cleanSearch !== '' && (
+            <div className="max-h-44 overflow-y-auto bg-slate-900 border border-slate-700 rounded p-1.5 space-y-1 shadow-2xl">
+              {preMatches.length === 0 && activeMatches.length === 0 && completedMatches.length === 0 ? (
+                <p className="text-[10px] text-slate-500 p-1 text-center">ไม่พบข้อมูลคนไข้ที่ตรงกัน</p>
+              ) : (
+                <>
+                  {activeMatches.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedPatientId(p.id);
+                        setSearchQuery('');
+                      }}
+                      className="p-1.5 bg-slate-800 hover:bg-amber-950/80 border border-slate-700 rounded cursor-pointer transition-colors flex items-center justify-between text-[11px]"
+                    >
+                      <div>
+                        <span className="font-bold text-white block">{p.name} ({p.hn})</span>
+                        <span className="text-[9px] text-emerald-400 font-mono">คิวในระบบ</span>
+                      </div>
+                      <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">เลือกดู</span>
+                    </div>
+                  ))}
+                  {completedMatches.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedPatientId(p.id);
+                        setSearchQuery('');
+                      }}
+                      className="p-1.5 bg-blue-950/80 hover:bg-blue-900 border border-blue-700 rounded cursor-pointer transition-colors flex items-center justify-between text-[11px]"
+                    >
+                      <div>
+                        <span className="font-bold text-blue-200 block">{p.name} ({p.hn})</span>
+                        <span className="text-[9px] text-sky-300 font-mono">💳 ปิดสิทธิ์แล้ว</span>
+                      </div>
+                      <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">แก้ไข</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Patient Queue Dropdown Selector in PiP */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
@@ -864,38 +934,51 @@ export default function SignalOverlay({
                 : `คิวพร้อมคีย์แผนกนี้ (${visibleQueuePatients.length} คน):`}
             </span>
           </div>
-          {visibleQueuePatients.length === 0 ? (
-            <div className="bg-slate-900/90 p-2 rounded text-center border border-slate-700">
-              <p className="text-[11px] text-amber-300 font-bold">
-                {stationFilter === 'opdStatus'
-                  ? '🟢 ไม่มีคิวค้างรอเปิด OPD'
-                  : '⏳ ยังไม่มีคิวคนไข้ที่พร้อมคีย์ในแผนกนี้ (กำลังรอสัญญาณจากแผนกก่อนหน้า)'}
-              </p>
-            </div>
-          ) : (
-            <select
-              value={currentPatient?.id || ''}
-              onChange={(e) => setSelectedPatientId(e.target.value)}
-              className="w-full text-xs bg-slate-800 border border-slate-700 text-white rounded px-2 py-1 outline-none cursor-pointer"
-            >
-              {visibleQueuePatients.map((p, idx) => (
-                <option key={p.id} value={p.id}>
-                  คิว #{idx + 1} - HN: {p.hn} - {p.name}
-                </option>
-              ))}
-            </select>
-          )}
+          <select
+            value={currentPatient?.id || ''}
+            onChange={(e) => setSelectedPatientId(e.target.value)}
+            className="w-full text-xs bg-slate-800 border border-slate-700 text-white rounded px-2 py-1 outline-none cursor-pointer"
+          >
+            {currentPatient && !visibleQueuePatients.some((p) => p.id === currentPatient.id) && (
+              <option key={currentPatient.id} value={currentPatient.id}>
+                {currentPatient.status === 'completed'
+                  ? `💳 [เคสปิดสิทธิ์แล้ว] HN: ${currentPatient.hn} - ${currentPatient.name}`
+                  : `🔍 [ค้นพบ] HN: ${currentPatient.hn} - ${currentPatient.name}`}
+              </option>
+            )}
+            {visibleQueuePatients.map((p, idx) => (
+              <option key={p.id} value={p.id}>
+                คิว #{idx + 1} - HN: {p.hn} - {p.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Current Active Patient View in PiP */}
         {currentPatient ? (
           <div className="bg-slate-800 rounded-xl p-2.5 border border-slate-700 space-y-2">
+            {currentPatient.status === 'completed' && (
+              <div className="bg-blue-950/90 border border-blue-700/80 rounded-lg p-2 space-y-1 text-xs text-blue-200">
+                <div className="flex items-center justify-between font-bold">
+                  <span>💳 เคสนี้ปิดสิทธิ์สิ้นสุดบริการแล้ว</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onToggleSignal(currentPatient.id, 'rightsStatus', 'pending')}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 py-1 rounded font-bold text-[11px] shadow cursor-pointer transition-colors flex items-center justify-center gap-1 border border-amber-300"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>↺ ยกเลิกปิดสิทธิ์ / ดึงกลับมาแก้ไข</span>
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center justify-between border-b border-slate-700 pb-1">
               <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-950 border border-sky-800 px-1.5 py-0.5 rounded">
                 HN: {currentPatient.hn}
               </span>
               <span className="text-[10px] text-emerald-400 font-bold">
-                คิวที่ #{currentQueueIndex}
+                {currentPatient.status === 'completed' ? '💳 สิ้นสุดบริการ' : `คิวที่ #${currentQueueIndex}`}
               </span>
             </div>
 

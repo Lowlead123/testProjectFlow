@@ -523,21 +523,65 @@ export default function App() {
       const matchedStep = stepIndex !== -1 ? workflowSteps[stepIndex] : null;
 
       // Sync step ID with standard status fields
-      if (field === 'opdStatus' || field === 'step_1' || (matchedStep && (matchedStep.id.includes('opd') || matchedStep.name.includes('OPD') || matchedStep.name.includes('เปิด') || matchedStep.name.includes('บัตร') || stepIndex === 0))) {
-        updated.opdStatus = (value === 'opened' || value === 'done' || value === 'processing' || value === 'sent') ? 'opened' : (value as any);
-        if (matchedStep) updated[matchedStep.id] = updated.opdStatus;
-      }
-      if (field === 'labStatus' || field === 'step_2' || (matchedStep && (matchedStep.id.includes('lab') || matchedStep.name.includes('แล็บ') || matchedStep.name.includes('เจาะ') || stepIndex === 1))) {
-        updated.labStatus = (value === 'opened' || value === 'done') ? 'opened' : (value as any);
-        if (matchedStep) updated[matchedStep.id] = updated.labStatus;
-      }
-      if (field === 'procedureStatus' || field === 'step_3' || (matchedStep && (matchedStep.id.includes('proc') || matchedStep.name.includes('หัตถการ') || matchedStep.name.includes('ฉีด') || stepIndex === 2))) {
-        updated.procedureStatus = (value === 'sent' || value === 'done' || value === 'opened') ? 'sent' : (value as any);
-        if (matchedStep) updated[matchedStep.id] = updated.procedureStatus;
-      }
-      if (field === 'rightsStatus' || field === 'step_4' || (matchedStep && (matchedStep.id.includes('right') || matchedStep.name.includes('สิทธิ์') || matchedStep.name.includes('ICD') || matchedStep.name.includes('ปิด') || stepIndex === workflowSteps.length - 1))) {
-        updated.rightsStatus = value === 'closed' ? 'closed' : (value as any);
-        if (matchedStep) updated[matchedStep.id] = updated.rightsStatus;
+      if (value === 'pending') {
+        if (field === 'opdStatus' || field === 'step_1' || (matchedStep && (matchedStep.id.includes('opd') || matchedStep.name.includes('OPD') || matchedStep.name.includes('เปิด') || matchedStep.name.includes('บัตร') || stepIndex === 0))) {
+          updated.opdStatus = 'pending';
+          if (matchedStep) updated[matchedStep.id] = 'pending';
+        }
+        if (field === 'labStatus' || field === 'step_2' || (matchedStep && (matchedStep.id.includes('lab') || matchedStep.name.includes('แล็บ') || matchedStep.name.includes('เจาะ') || stepIndex === 1))) {
+          updated.labStatus = 'pending';
+          if (matchedStep) updated[matchedStep.id] = 'pending';
+        }
+        if (field === 'procedureStatus' || field === 'step_3' || (matchedStep && (matchedStep.id.includes('proc') || matchedStep.name.includes('หัตถการ') || matchedStep.name.includes('ฉีด') || stepIndex === 2))) {
+          updated.procedureStatus = 'pending';
+          if (matchedStep) updated[matchedStep.id] = 'pending';
+        }
+        if (field === 'rightsStatus' || field === 'step_4' || (matchedStep && (matchedStep.id.includes('right') || matchedStep.name.includes('สิทธิ์') || matchedStep.name.includes('ICD') || matchedStep.name.includes('ปิด') || stepIndex === workflowSteps.length - 1))) {
+          updated.rightsStatus = 'pending';
+          if (matchedStep) updated[matchedStep.id] = 'pending';
+        }
+        if (matchedStep) {
+          updated[matchedStep.id] = 'pending';
+        }
+
+        const targetStepId = matchedStep?.id || field;
+        updated.history = (patient.history || []).filter((h) => {
+          if (field === 'opdStatus' || field === 'step_1' || stepIndex === 0) {
+            return h.stepId !== 'opdStatus' && h.stepId !== 'step_1' && h.stepId !== targetStepId;
+          }
+          if (field === 'labStatus' || field === 'step_2' || stepIndex === 1) {
+            return h.stepId !== 'labStatus' && h.stepId !== 'step_2' && h.stepId !== targetStepId;
+          }
+          if (field === 'procedureStatus' || field === 'step_3' || stepIndex === 2) {
+            return h.stepId !== 'procedureStatus' && h.stepId !== 'step_3' && h.stepId !== targetStepId;
+          }
+          if (field === 'rightsStatus' || field === 'step_4' || stepIndex === workflowSteps.length - 1) {
+            return h.stepId !== 'rightsStatus' && h.stepId !== 'step_4' && h.stepId !== targetStepId;
+          }
+          return h.stepId !== field && h.stepId !== targetStepId;
+        });
+
+        if (patient.status === 'completed' || updated.status === 'completed') {
+          updated.status = 'processing';
+          updated.currentStepId = matchedStep?.id || workflowSteps[0]?.id || 'step_1';
+        }
+      } else {
+        if (field === 'opdStatus' || field === 'step_1' || (matchedStep && (matchedStep.id.includes('opd') || matchedStep.name.includes('OPD') || matchedStep.name.includes('เปิด') || matchedStep.name.includes('บัตร') || stepIndex === 0))) {
+          updated.opdStatus = (value === 'opened' || value === 'done' || value === 'processing' || value === 'sent') ? 'opened' : (value as any);
+          if (matchedStep) updated[matchedStep.id] = updated.opdStatus;
+        }
+        if (field === 'labStatus' || field === 'step_2' || (matchedStep && (matchedStep.id.includes('lab') || matchedStep.name.includes('แล็บ') || matchedStep.name.includes('เจาะ') || stepIndex === 1))) {
+          updated.labStatus = (value === 'opened' || value === 'done') ? 'opened' : (value as any);
+          if (matchedStep) updated[matchedStep.id] = updated.labStatus;
+        }
+        if (field === 'procedureStatus' || field === 'step_3' || (matchedStep && (matchedStep.id.includes('proc') || matchedStep.name.includes('หัตถการ') || matchedStep.name.includes('ฉีด') || stepIndex === 2))) {
+          updated.procedureStatus = (value === 'sent' || value === 'done' || value === 'opened') ? 'sent' : (value as any);
+          if (matchedStep) updated[matchedStep.id] = updated.procedureStatus;
+        }
+        if (field === 'rightsStatus' || field === 'step_4' || (matchedStep && (matchedStep.id.includes('right') || matchedStep.name.includes('สิทธิ์') || matchedStep.name.includes('ICD') || matchedStep.name.includes('ปิด') || stepIndex === workflowSteps.length - 1))) {
+          updated.rightsStatus = value === 'closed' ? 'closed' : (value as any);
+          if (matchedStep) updated[matchedStep.id] = updated.rightsStatus;
+        }
       }
 
       const isCloseRightsDischarge =
