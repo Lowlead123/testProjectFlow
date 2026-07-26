@@ -1058,13 +1058,9 @@ export default function App() {
             <h1 className="text-xl font-bold text-white tracking-tight font-sans">
               🔒 ระบบล็อกความปลอดภัยข้อมูลคนไข้ OPD
             </h1>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed font-sans">
-              จำกัดสิทธิ์เข้าใช้งานโปรแกรมเพื่อป้องกันข้อมูลคนไข้รั่วไหล กรุณากรอกรหัสผ่านผู้ดูแลระบบ (Admin Passcode)
+            <p className="text-xs text-slate-300 mt-2 leading-relaxed font-sans font-medium">
+              จำกัดสิทธิ์เข้าใช้งาน กรุณาติดต่อกับทางผู้พัฒนาเท่านั้น
             </p>
-            <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-950/80 border border-blue-500/30 text-[11px] text-blue-300 font-mono">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>ดึงตรวจสอบรหัสตรงจาก Cloud Firestore เท่านั้น</span>
-            </div>
           </div>
 
           {/* Form */}
