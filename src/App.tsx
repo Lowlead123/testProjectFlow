@@ -9,7 +9,6 @@ import IntakeForm from './components/IntakeForm';
 import WorkflowSettings from './components/WorkflowSettings';
 import ActiveQueues from './components/ActiveQueues';
 import DatabaseViewer from './components/DatabaseViewer';
-import DesktopGuide from './components/DesktopGuide';
 import NotificationToast from './components/NotificationToast';
 import StandbyWizard from './components/StandbyWizard';
 import SignalOverlay from './components/SignalOverlay';
@@ -55,7 +54,7 @@ const DEFAULT_SERVICES: ServiceTag[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'queues' | 'preregister' | 'intake' | 'settings' | 'database' | 'guide'>('queues');
+  const [activeTab, setActiveTab] = useState<'queues' | 'preregister' | 'intake' | 'settings' | 'database'>('queues');
   const [patients, setPatients] = useState<Patient[]>([]);
   const [prePatients, setPrePatients] = useState<PreRegisteredPatient[]>([]);
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
@@ -1094,20 +1093,6 @@ export default function App() {
                 <span>ฐานข้อมูลผู้ป่วย OPD</span>
               </button>
             )}
-
-            {/* Tab: Desktop Guide */}
-            <button
-              id="tab-guide"
-              onClick={() => setActiveTab('guide')}
-              className={`px-4 py-2.5 border-b-2 font-sans font-medium text-xs transition-all flex items-center gap-2 cursor-pointer ${
-                activeTab === 'guide'
-                  ? 'border-blue-500 text-blue-400 font-bold bg-white/5'
-                  : 'border-transparent text-slate-300 hover:text-white hover:border-slate-500'
-              }`}
-            >
-              <Monitor className="w-4 h-4 text-sky-400" />
-              <span>คู่มือสร้างโปรแกรม .exe</span>
-            </button>
           </nav>
         </div>
       </header>
@@ -1296,10 +1281,6 @@ export default function App() {
             onDeletePatient={handleDeletePatient}
             onEditPatient={handleEditPatient}
           />
-        )}
-
-        {activeTab === 'guide' && (
-          <DesktopGuide />
         )}
       </main>
 
