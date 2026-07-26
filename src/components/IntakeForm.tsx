@@ -694,23 +694,23 @@ export default function IntakeForm({
         </div>
 
         {/* Vital Signs & BMI Section (ชั่งน้ำหนัก วัดส่วนสูง ความดัน ชีพจร คำนวณ BMI) */}
-        <div className="bg-sky-50/60 border border-sky-200 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between border-b border-sky-100 pb-2">
-            <span className="font-bold text-xs text-sky-900 flex items-center gap-1.5 font-sans">
-              <Scale className="w-4 h-4 text-sky-600" />
+        <div className="bg-sky-50/70 border border-sky-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-sky-200/60 pb-2.5">
+            <span className="font-bold text-xs sm:text-sm text-sky-950 flex items-center gap-2 font-sans">
+              <Scale className="w-4 h-4 text-sky-600 shrink-0" />
               <span>วัดสัญญาณชีพ & ประเมินดัชนีมวลกาย (Weight, Height, Blood Pressure, Pulse & BMI)</span>
             </span>
-            <span className="text-[10px] text-sky-600 font-semibold">* บังคับระบุน้ำหนัก/ส่วนสูง</span>
+            <span className="text-[11px] text-sky-700 font-semibold">* บังคับระบุข้อมูลให้ครบ</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {/* Weight */}
             <div id="weight">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-800 mb-1">
                 น้ำหนัก (กก. / kg) <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <Scale className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Scale className="w-4 h-4 text-sky-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   ref={weightRef}
                   type="number"
@@ -721,23 +721,23 @@ export default function IntakeForm({
                     setWeight(e.target.value === '' ? '' : Number(e.target.value));
                     if (errors.weight) setErrors(prev => ({ ...prev, weight: '' }));
                   }}
-                  className={`w-full pl-9 pr-3 py-2 rounded-xl border text-xs font-bold transition-all outline-none ${
+                  className={`w-full pl-9 pr-2.5 py-2.5 rounded-xl border text-sm sm:text-base font-mono font-bold transition-all outline-none ${
                     errors.weight
-                      ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
-                      : 'border-slate-300 focus:border-sky-500 bg-white'
+                      ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200 text-rose-900'
+                      : 'border-slate-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 bg-white text-slate-900'
                   }`}
                 />
               </div>
-              {errors.weight && <p className="text-[10px] text-rose-500 mt-1">{errors.weight}</p>}
+              {errors.weight && <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.weight}</p>}
             </div>
 
             {/* Height */}
             <div id="height">
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+              <label className="block text-xs font-bold text-slate-800 mb-1">
                 ส่วนสูง (ซม. / cm) <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <Ruler className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Ruler className="w-4 h-4 text-sky-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   ref={heightRef}
                   type="number"
@@ -748,73 +748,63 @@ export default function IntakeForm({
                     setHeight(e.target.value === '' ? '' : Number(e.target.value));
                     if (errors.height) setErrors(prev => ({ ...prev, height: '' }));
                   }}
-                  className={`w-full pl-9 pr-3 py-2 rounded-xl border text-xs font-bold transition-all outline-none ${
+                  className={`w-full pl-9 pr-2.5 py-2.5 rounded-xl border text-sm sm:text-base font-mono font-bold transition-all outline-none ${
                     errors.height
-                      ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
-                      : 'border-slate-300 focus:border-sky-500 bg-white'
+                      ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200 text-rose-900'
+                      : 'border-slate-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 bg-white text-slate-900'
                   }`}
                 />
               </div>
-              {errors.height && <p className="text-[10px] text-rose-500 mt-1">{errors.height}</p>}
+              {errors.height && <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.height}</p>}
             </div>
 
-            {/* Blood Pressure */}
+            {/* Blood Pressure (SYS / DIA) */}
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                ความดันโลหิต (mmHg) <span className="text-rose-500">*</span>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                ความดัน (mmHg) SYS/DIA <span className="text-rose-500">*</span>
               </label>
-              <div className="flex items-center gap-1.5">
-                <div className="relative flex-1">
-                  <Activity className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  <input
-                    ref={bpRef}
-                    type="number"
-                    placeholder="127"
-                    value={bpSystolic}
-                    onChange={(e) => {
-                      setBpSystolic(e.target.value);
-                      if (errors.bloodPressure) setErrors((prev) => ({ ...prev, bloodPressure: '' }));
-                    }}
-                    className={`w-full pl-7 pr-1 py-2 rounded-xl border text-xs font-mono font-bold transition-all outline-none text-center ${
-                      errors.bloodPressure
-                        ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
-                        : 'border-slate-300 focus:border-sky-500 bg-white'
-                    }`}
-                  />
-                </div>
-                <span className="text-sm font-bold text-slate-400 select-none">/</span>
-                <div className="relative flex-1">
-                  <input
-                    type="number"
-                    placeholder="67"
-                    value={bpDiastolic}
-                    onChange={(e) => {
-                      setBpDiastolic(e.target.value);
-                      if (errors.bloodPressure) setErrors((prev) => ({ ...prev, bloodPressure: '' }));
-                    }}
-                    className={`w-full px-2 py-2 rounded-xl border text-xs font-mono font-bold transition-all outline-none text-center ${
-                      errors.bloodPressure
-                        ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
-                        : 'border-slate-300 focus:border-sky-500 bg-white'
-                    }`}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-between items-center text-[9px] text-slate-400 font-mono mt-1 px-1">
-                <span>SYS (ตัวบน)</span>
-                <span>/</span>
-                <span>DIA (ตัวล่าง)</span>
+              <div className="flex items-center gap-1">
+                <input
+                  ref={bpRef}
+                  type="number"
+                  placeholder="127"
+                  value={bpSystolic}
+                  onChange={(e) => {
+                    setBpSystolic(e.target.value);
+                    if (errors.bloodPressure) setErrors((prev) => ({ ...prev, bloodPressure: '' }));
+                  }}
+                  className={`w-1/2 px-1.5 py-2.5 rounded-xl border text-sm sm:text-base font-mono font-bold text-center transition-all outline-none ${
+                    errors.bloodPressure
+                      ? 'border-rose-500 bg-rose-50 text-rose-950'
+                      : 'border-slate-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 bg-white text-slate-900'
+                  }`}
+                />
+                <span className="text-base font-mono font-bold text-slate-400 select-none">/</span>
+                <input
+                  type="number"
+                  placeholder="67"
+                  value={bpDiastolic}
+                  onChange={(e) => {
+                    setBpDiastolic(e.target.value);
+                    if (errors.bloodPressure) setErrors((prev) => ({ ...prev, bloodPressure: '' }));
+                  }}
+                  className={`w-1/2 px-1.5 py-2.5 rounded-xl border text-sm sm:text-base font-mono font-bold text-center transition-all outline-none ${
+                    errors.bloodPressure
+                      ? 'border-rose-500 bg-rose-50 text-rose-950'
+                      : 'border-slate-300 focus:border-sky-500 focus:ring-2 focus:ring-sky-100 bg-white text-slate-900'
+                  }`}
+                />
               </div>
               {errors.bloodPressure && <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.bloodPressure}</p>}
             </div>
 
             {/* Pulse Rate */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
+            <div id="pulse">
+              <label className="block text-xs font-bold text-slate-800 mb-1">
                 ชีพจร (bpm) <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
-                <HeartPulse className="w-4 h-4 text-rose-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <HeartPulse className="w-4 h-4 text-rose-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   ref={pulseRef}
                   type="number"
@@ -824,38 +814,35 @@ export default function IntakeForm({
                     setPulseRate(e.target.value === '' ? '' : Number(e.target.value));
                     if (errors.pulseRate) setErrors((prev) => ({ ...prev, pulseRate: '' }));
                   }}
-                  className={`w-full pl-9 pr-3 py-2 rounded-xl border text-xs font-mono font-bold transition-all outline-none ${
+                  className={`w-full pl-9 pr-2.5 py-2.5 rounded-xl border text-sm sm:text-base font-mono font-bold text-rose-700 transition-all outline-none ${
                     errors.pulseRate
                       ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
-                      : 'border-slate-300 focus:border-sky-500 bg-white'
+                      : 'border-slate-300 focus:border-rose-500 focus:ring-2 focus:ring-rose-100 bg-white'
                   }`}
                 />
               </div>
-              <span className="text-[9px] text-slate-400 font-mono">ครั้ง / นาที</span>
               {errors.pulseRate && <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.pulseRate}</p>}
             </div>
 
             {/* Live Calculated BMI Display */}
-            <div className="sm:col-span-2 lg:col-span-1 bg-white p-3 rounded-xl border border-sky-200 shadow-2xs flex flex-col justify-center">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
-                ผลคำนวณ BMI อัตโนมัติ:
+            <div className="bg-white px-3 py-2 rounded-xl border border-sky-200 shadow-2xs flex flex-col justify-center">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5 font-sans flex items-center justify-between">
+                <span>BMI คำนวณ:</span>
+                <span className="text-sky-600 text-[10px] font-mono">kg/m²</span>
               </div>
 
               {bmiResult ? (
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xl font-black font-mono text-slate-900">
-                      {bmiResult.bmi}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-semibold">kg/m²</span>
-                  </div>
-                  <div className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold inline-block ${bmiResult.colorClass}`}>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-lg font-black font-mono text-slate-900 leading-none">
+                    {bmiResult.bmi}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-md border text-[10px] font-bold ${bmiResult.colorClass}`}>
                     {bmiResult.category}
-                  </div>
+                  </span>
                 </div>
               ) : (
-                <div className="text-[11px] text-slate-400 italic">
-                  ระบุน้ำหนัก & ส่วนสูง
+                <div className="text-[10px] text-slate-400 italic">
+                  ระบุน้ำหนัก/ส่วนสูง
                 </div>
               )}
             </div>

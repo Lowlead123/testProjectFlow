@@ -54,6 +54,7 @@ interface SignalOverlayProps {
   onAdvancePatient?: (patientId: string, notes: string) => void;
   onOpenOpdFromPreRegistered?: (prePatient: PreRegisteredPatient, customServices?: string[]) => void;
   onUpdatePatientInfo?: (patientId: string, updatedFields: Partial<Patient>) => void;
+  onClose?: () => void;
 }
 
 export const getStationKeyForStep = (step: WorkflowStep, idx: number): string => {
@@ -89,6 +90,7 @@ export default function SignalOverlay({
   onAdvancePatient,
   onOpenOpdFromPreRegistered,
   onUpdatePatientInfo,
+  onClose,
 }: SignalOverlayProps) {
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [overlayTab, setOverlayTab] = useState<'signals' | 'totals'>('signals');
@@ -1295,14 +1297,25 @@ export default function SignalOverlay({
               </div>
             </div>
 
-            <button
-              id="btn-expand-signal-overlay"
-              onClick={() => setIsMinimized(false)}
-              className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-sky-400 transition-colors cursor-pointer flex items-center gap-1 font-bold text-xs"
-            >
-              <Maximize2 className="w-4 h-4" />
-              <span className="hidden sm:inline">เปิดแผงซิก</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                id="btn-expand-signal-overlay"
+                onClick={() => setIsMinimized(false)}
+                className="p-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-sky-400 transition-colors cursor-pointer flex items-center gap-1 font-bold text-xs"
+              >
+                <Maximize2 className="w-4 h-4" />
+                <span className="hidden sm:inline">เปิดแผงซิก</span>
+              </button>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="p-1.5 text-slate-400 hover:text-rose-300 hover:bg-rose-950/80 rounded-lg transition-colors cursor-pointer"
+                  title="ปิดปลั๊กอินส่งซิกด่วน"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           /* Full Expanded Overlay Floating Panel */
@@ -1355,6 +1368,17 @@ export default function SignalOverlay({
                 >
                   <Minimize2 className="w-4 h-4" />
                 </button>
+
+                {onClose && (
+                  <button
+                    id="btn-close-signal-overlay"
+                    onClick={onClose}
+                    className="p-1.5 text-slate-400 hover:text-rose-300 hover:bg-rose-950/80 rounded-lg transition-colors cursor-pointer"
+                    title="ปิดปลั๊กอินส่งซิกด่วน"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
 
