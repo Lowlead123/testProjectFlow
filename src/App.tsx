@@ -1152,7 +1152,7 @@ export default function App() {
               <form onSubmit={handleResetPasscodeSubmit} className="space-y-3">
                 <input
                   type="text"
-                  placeholder="รหัสยืนยันฉุกเฉิน (เช่น HC03)"
+                  placeholder="รหัสยืนยันฉุกเฉิน"
                   value={recoveryCodeInput}
                   onChange={(e) => setRecoveryCodeInput(e.target.value)}
                   className="w-full font-mono uppercase text-xs px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white outline-none focus:border-blue-500"
