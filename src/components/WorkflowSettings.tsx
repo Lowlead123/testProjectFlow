@@ -4,8 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { WorkflowStep, ServiceTag, OverlayConfig, ActionLabels } from '../types';
-import { Settings, Plus, Trash2, ArrowUp, ArrowDown, RefreshCw, Sparkles, KeyRound, ShieldCheck, Check, Info, Radio, Lock, Shield, Edit3, X, Save, Activity, Zap } from 'lucide-react';
+import { WorkflowStep, ServiceTag, OverlayConfig, ActionLabels, PatientRight } from '../types';
+import { Settings, Plus, Trash2, ArrowUp, ArrowDown, RefreshCw, Sparkles, KeyRound, ShieldCheck, Check, Info, Radio, Lock, Shield, Edit3, X, Save, Activity, Zap, CreditCard } from 'lucide-react';
 
 interface WorkflowSettingsProps {
   workflowSteps: WorkflowStep[];
@@ -14,6 +14,10 @@ interface WorkflowSettingsProps {
   availableServices: ServiceTag[];
   onAddService: (name: string) => void;
   onDeleteService: (id: string) => void;
+  availablePatientRights?: PatientRight[];
+  onAddPatientRight?: (name: string) => void;
+  onDeletePatientRight?: (id: string) => void;
+  onResetPatientRights?: () => void;
   adminPasscode: string;
   onUpdatePasscode: (newPasscode: string) => void;
   overlayConfig?: OverlayConfig;
@@ -36,6 +40,10 @@ export default function WorkflowSettings({
   availableServices,
   onAddService,
   onDeleteService,
+  availablePatientRights = [],
+  onAddPatientRight,
+  onDeletePatientRight,
+  onResetPatientRights,
   adminPasscode,
   onUpdatePasscode,
   overlayConfig,
@@ -45,6 +53,10 @@ export default function WorkflowSettings({
   const [newStepDesc, setNewStepDesc] = useState('');
   const [newStepColor, setNewStepColor] = useState('sky');
   const [error, setError] = useState('');
+
+  // Patient Rights management state
+  const [newRightName, setNewRightName] = useState('');
+  const [rightError, setRightError] = useState('');
 
   // Step Editing State
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
@@ -749,6 +761,128 @@ export default function WorkflowSettings({
             </div>
             {serviceError && (
               <p className="text-rose-600 font-bold text-xs mt-1.5 font-sans">{serviceError}</p>
+            )}
+          </form>
+        </div>
+      </div>
+
+      {/* PATIENT RIGHTS MANAGEMENT SECTION */}
+      <div className="mt-8 border-t border-gray-200 pt-6">
+        <div className="bg-gradient-to-r from-emerald-50/60 to-teal-50/60 border border-emerald-200 rounded-2xl p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-emerald-100 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-emerald-600 text-white rounded-xl shadow-xs">
+                <CreditCard className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-sans font-bold text-sm text-slate-800">
+                  ตั้งค่าตัวเลือกสิทธิ์การรักษาผู้ป่วย (Patient Health Rights Management) <span className="text-rose-500">*</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-sans">
+                  (กำหนดรายการสิทธิ์การรักษาเพื่อใช้ในการลงทะเบียนล่วงหน้า คัดกรอง และดูรายงาน — สามารถเพิ่ม ลด หรือตั้งใหม่ได้)
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('คุณต้องการรีเซ็ตตัวเลือกสิทธิ์การรักษาเป็นค่าเริ่มต้นใช่หรือไม่?')) {
+                    if (onResetPatientRights) onResetPatientRights();
+                  }
+                }}
+                className="text-[11px] font-sans font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>รีเซ็ตสิทธิ์มาตรฐาน</span>
+              </button>
+              <span className="text-xs font-mono font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full self-start sm:self-auto">
+                ทั้งหมด {availablePatientRights.length} รายการ
+              </span>
+            </div>
+          </div>
+
+          {/* Rights Badges Grid */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-700 font-sans">
+              รายการสิทธิ์ที่มีในระบบปัจจุบัน (คลิกปุ่มถังขยะเพื่อลบสิทธิ์ที่ไม่ต้องการออก):
+            </label>
+
+            {availablePatientRights.length === 0 ? (
+              <div className="p-4 bg-white/80 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-400 font-sans">
+                ยังไม่มีรายการสิทธิ์ในระบบ กรุณาพิมพ์ชื่อเพื่อเพิ่มรายการสิทธิ์ใหม่ด้านล่าง
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 max-h-52 overflow-y-auto p-1">
+                {availablePatientRights.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-emerald-200/80 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs hover:border-emerald-300 transition-all group"
+                  >
+                    <span>{r.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`คุณต้องการลบสิทธิ์การรักษา "${r.name}" ใช่หรือไม่?`)) {
+                          if (onDeletePatientRight) onDeletePatientRight(r.id);
+                        }
+                      }}
+                      className="p-0.5 rounded-md hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                      title={`ลบ ${r.name}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Form to Add New Right */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!newRightName.trim()) {
+                setRightError('กรุณากรอกชื่อสิทธิ์การรักษา');
+                return;
+              }
+              if (availablePatientRights.some(r => r.name.toLowerCase() === newRightName.trim().toLowerCase())) {
+                setRightError('มีชื่อสิทธิ์การรักษานี้ในระบบแล้ว');
+                return;
+              }
+              if (onAddPatientRight) {
+                onAddPatientRight(newRightName.trim());
+                setNewRightName('');
+                setRightError('');
+              }
+            }}
+            className="pt-2 border-t border-emerald-100"
+          >
+            <label htmlFor="newRightName" className="block text-xs font-bold text-slate-700 mb-1.5 font-sans">
+              เพิ่มสิทธิ์การรักษาใหม่:
+            </label>
+            <div className="flex flex-col sm:flex-row items-stretch gap-2">
+              <input
+                id="newRightName"
+                type="text"
+                placeholder="พิมพ์ชื่อสิทธิ์ เช่น บัตรทอง (UC), ประกันสังคม, ข้าราชการ/เบิกตรง, ชำระเงินเอง..."
+                value={newRightName}
+                onChange={(e) => {
+                  setNewRightName(e.target.value);
+                  if (rightError) setRightError('');
+                }}
+                className="flex-1 font-sans text-xs px-3.5 py-2 rounded-xl border border-emerald-200 bg-white outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all"
+              />
+              <button
+                type="submit"
+                className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-sans font-bold text-xs px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>เพิ่มสิทธิ์การรักษา</span>
+              </button>
+            </div>
+            {rightError && (
+              <p className="text-rose-600 font-bold text-xs mt-1.5 font-sans">{rightError}</p>
             )}
           </form>
         </div>

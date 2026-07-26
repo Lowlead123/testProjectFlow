@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Patient, WorkflowStep, ServiceTag, PreRegisteredPatient } from '../types';
+import { Patient, WorkflowStep, ServiceTag, PreRegisteredPatient, PatientRight } from '../types';
 import { calculateBMI, BMIResult } from '../utils/bmi';
 import { 
   ClipboardCheck, 
@@ -33,6 +33,7 @@ interface IntakeFormProps {
   patients: Patient[];
   prePatients?: PreRegisteredPatient[];
   availableServices: ServiceTag[];
+  availablePatientRights?: PatientRight[];
 }
 
 export default function IntakeForm({
@@ -41,12 +42,14 @@ export default function IntakeForm({
   patients,
   prePatients = [],
   availableServices,
+  availablePatientRights = [],
 }: IntakeFormProps) {
   // Search & Auto-fill State
   const [searchTerm, setSearchTerm] = useState('');
   const [suggestions, setSuggestions] = useState<(Patient | PreRegisteredPatient)[]>([]);
   const [selectedHn, setSelectedHn] = useState<string | undefined>(undefined);
   const [autofillMsg, setAutofillMsg] = useState<string | null>(null);
+  const [isFromPreReg, setIsFromPreReg] = useState<boolean>(false);
 
   // Screening Form Fields
   const [citizenId, setCitizenId] = useState('');
@@ -196,6 +199,7 @@ export default function IntakeForm({
     }
 
     setSelectedHn(p.hn);
+    setIsFromPreReg(true);
     setSuggestions([]);
     setSearchTerm('');
 
@@ -325,6 +329,8 @@ export default function IntakeForm({
       opdStatus: 'pending',
       requestedServices: selectedServices,
       quickNotes: quickNotes.trim(),
+      isDirectWalkIn: !isFromPreReg,
+      hasPreRegistrationData: isFromPreReg,
     });
 
     // Reset Form
@@ -342,6 +348,7 @@ export default function IntakeForm({
     setSelectedServices([]);
     setQuickNotes('');
     setSelectedHn(undefined);
+    setIsFromPreReg(false);
     setErrors({});
     setBmiResult(null);
 
@@ -670,12 +677,18 @@ export default function IntakeForm({
               onChange={(e) => setRights(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold outline-none focus:border-sky-500"
             >
-              <option value="บัตรทอง (UC)">บัตรทอง (UC)</option>
-              <option value="ประกันสังคม (SSO)">ประกันสังคม (SSO)</option>
-              <option value="ข้าราชการ/เบิกตรง (OFC)">ข้าราชการ/เบิกตรง (OFC)</option>
-              <option value="ชำระเงินเอง (Cash)">ชำระเงินเอง (Cash)</option>
-              <option value="ประกันสุขภาพเอกชน">ประกันสุขภาพเอกชน</option>
-              <option value="รัฐวิสาหกิจ">รัฐวิสาหกิจ</option>
+              {availablePatientRights && availablePatientRights.length > 0 ? (
+                availablePatientRights.map((r) => (
+                  <option key={r.id} value={r.name}>{r.name}</option>
+                ))
+              ) : (
+                <>
+                  <option value="บัตรทอง (UC)">บัตรทอง (UC)</option>
+                  <option value="ประกันสังคม">ประกันสังคม</option>
+                  <option value="ข้าราชการ / เบิกตรง">ข้าราชการ / เบิกตรง</option>
+                  <option value="ชำระเงินเอง">ชำระเงินเอง</option>
+                </>
+              )}
             </select>
           </div>
         </div>

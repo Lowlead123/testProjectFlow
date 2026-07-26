@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Patient, WorkflowStep, SyncMessage, ServiceTag, OverlayConfig, PreRegisteredPatient, PatientHistoryLog } from './types';
+import { Patient, WorkflowStep, SyncMessage, ServiceTag, OverlayConfig, PreRegisteredPatient, PatientHistoryLog, PatientRight } from './types';
 import IntakeForm from './components/IntakeForm';
 import WorkflowSettings from './components/WorkflowSettings';
 import ActiveQueues from './components/ActiveQueues';
@@ -15,7 +15,7 @@ import SignalOverlay from './components/SignalOverlay';
 import PreRegisterDirectory from './components/PreRegisterDirectory';
 import { playNotificationChime } from './utils/audio';
 import { db } from './firebase';
-import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, setDoc, deleteDoc, onSnapshot, getDocs } from 'firebase/firestore';
 import { 
   Activity, 
   PlusCircle, 
@@ -53,6 +53,16 @@ const DEFAULT_SERVICES: ServiceTag[] = [
   { id: 'service_6', name: 'ตรวจโควิด ATK (COVID-19 Test)' }
 ];
 
+// Default Patient Rights Options
+export const DEFAULT_PATIENT_RIGHTS: PatientRight[] = [
+  { id: 'right_1', name: 'บัตรทอง (UC)' },
+  { id: 'right_2', name: 'ประกันสังคม' },
+  { id: 'right_3', name: 'ข้าราชการ / เบิกตรง' },
+  { id: 'right_4', name: 'ชำระเงินเอง' },
+  { id: 'right_5', name: 'ต่างชาติ / แรงงานต่างด้าว' },
+  { id: 'right_6', name: 'พรบ. ผู้ประสบภัยจากรถ' }
+];
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'queues' | 'preregister' | 'intake' | 'settings' | 'database'>('queues');
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -64,6 +74,7 @@ export default function App() {
 
   // New States for Clinical Signals, Admin passcode, and Workspace Standby
   const [availableServices, setAvailableServices] = useState<ServiceTag[]>([]);
+  const [availablePatientRights, setAvailablePatientRights] = useState<PatientRight[]>([]);
   const [adminPasscode, setAdminPasscode] = useState<string>('1234');
   const [overlayConfig, setOverlayConfig] = useState<OverlayConfig>({
     opdFirstAllowedActions: ['opdStatus', 'labStatus', 'procedureStatus', 'requestedServices', 'quickNotes'],
@@ -336,6 +347,37 @@ export default function App() {
     return () => unsubscribeServices();
   }, []);
 
+  // Subscribe to Available Patient Rights Options
+  useEffect(() => {
+    const unsubscribeRights = onSnapshot(
+      collection(db, 'availablePatientRights'),
+      async (snapshot) => {
+        const rightsList: PatientRight[] = [];
+        snapshot.forEach((docSnap) => {
+          rightsList.push({ id: docSnap.id, ...docSnap.data() } as PatientRight);
+        });
+
+        if (rightsList.length === 0) {
+          try {
+            for (const r of DEFAULT_PATIENT_RIGHTS) {
+              await setDoc(doc(db, 'availablePatientRights', r.id), r);
+            }
+          } catch (e) {
+            console.error('Error bootstrapping default patient rights:', e);
+          }
+        } else {
+          setAvailablePatientRights(rightsList);
+        }
+      },
+      (error) => {
+        console.error('Error listening to availablePatientRights:', error);
+        setAvailablePatientRights(DEFAULT_PATIENT_RIGHTS);
+      }
+    );
+
+    return () => unsubscribeRights();
+  }, []);
+
   // Subscribe to Admin Passcode
   useEffect(() => {
     const unsubscribePasscode = onSnapshot(
@@ -445,6 +487,37 @@ export default function App() {
     }
   };
 
+  const handleAddPatientRight = async (name: string) => {
+    const id = `right_${Date.now()}`;
+    try {
+      await setDoc(doc(db, 'availablePatientRights', id), { id, name });
+    } catch (err) {
+      console.error('Error adding patient right to Firestore:', err);
+    }
+  };
+
+  const handleDeletePatientRight = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'availablePatientRights', id));
+    } catch (err) {
+      console.error('Error deleting patient right from Firestore:', err);
+    }
+  };
+
+  const handleResetPatientRights = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'availablePatientRights'));
+      for (const docSnap of snap.docs) {
+        await deleteDoc(doc(db, 'availablePatientRights', docSnap.id));
+      }
+      for (const r of DEFAULT_PATIENT_RIGHTS) {
+        await setDoc(doc(db, 'availablePatientRights', r.id), r);
+      }
+    } catch (err) {
+      console.error('Error resetting patient rights:', err);
+    }
+  };
+
   const handleUpdatePasscode = async (newPasscode: string) => {
     try {
       await setDoc(doc(db, 'appSettings', 'passcode'), { code: newPasscode });
@@ -489,6 +562,8 @@ export default function App() {
       opdStatus: 'pending',
       requestedServices: customServices || prePatient.plannedServices || [],
       quickNotes: prePatient.notes || '',
+      isDirectWalkIn: false,
+      hasPreRegistrationData: true,
     };
 
     try {
@@ -1113,6 +1188,7 @@ export default function App() {
         {activeTab === 'preregister' && (
           <PreRegisterDirectory
             availableServices={availableServices}
+            availablePatientRights={availablePatientRights}
             activePatients={patients}
             onSendToOpdQueue={handleSendPreRegisteredToOpdQueue}
           />
@@ -1126,6 +1202,7 @@ export default function App() {
               patients={patients}
               prePatients={prePatients}
               availableServices={availableServices}
+              availablePatientRights={availablePatientRights}
             />
           </div>
         )}
@@ -1264,6 +1341,10 @@ export default function App() {
                   availableServices={availableServices}
                   onAddService={handleAddService}
                   onDeleteService={handleDeleteService}
+                  availablePatientRights={availablePatientRights}
+                  onAddPatientRight={handleAddPatientRight}
+                  onDeletePatientRight={handleDeletePatientRight}
+                  onResetPatientRights={handleResetPatientRights}
                   adminPasscode={adminPasscode}
                   onUpdatePasscode={handleUpdatePasscode}
                   overlayConfig={overlayConfig}
@@ -1278,6 +1359,7 @@ export default function App() {
           <DatabaseViewer
             patients={patients}
             workflowSteps={workflowSteps}
+            availablePatientRights={availablePatientRights}
             onDeletePatient={handleDeletePatient}
             onEditPatient={handleEditPatient}
           />
@@ -1289,9 +1371,11 @@ export default function App() {
         patients={patients}
         preRegisteredPatients={prePatients}
         availableServices={availableServices}
+        availablePatientRights={availablePatientRights}
         overlayConfig={overlayConfig}
         currentStationId={currentStationId}
         workflowSteps={workflowSteps}
+        standbyStations={standbyStations}
         onToggleSignal={handleToggleSignal}
         onUpdateQuickNotes={handleUpdateQuickNotes}
         onAdvancePatient={handleAdvancePatient}

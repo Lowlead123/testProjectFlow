@@ -36,9 +36,16 @@ export interface Patient {
   procedureStatus?: 'sent' | 'pending' | 'done'; // สถานะ "ส่งห้องหัตถการ"
   rightsStatus?: 'closed' | 'pending'; // สถานะ "ปิดสิทธิ์การรักษา"
   quickNotes?: string; // ข้อความส่งซิกด่วน
+  isDirectWalkIn?: boolean; // Walk-in direct at intake (ไม่ได้ดึงจากการลงทะเบียนล่วงหน้า)
+  hasPreRegistrationData?: boolean; // มีข้อมูลลงทะเบียนล่วงหน้า
 }
 
 export interface ServiceTag {
+  id: string;
+  name: string;
+}
+
+export interface PatientRight {
   id: string;
   name: string;
 }

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { PreRegisteredPatient, ServiceTag, Patient } from '../types';
+import { PreRegisteredPatient, ServiceTag, Patient, PatientRight } from '../types';
 import { db } from '../firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import {
@@ -29,12 +29,14 @@ import {
 
 interface PreRegisterDirectoryProps {
   availableServices: ServiceTag[];
+  availablePatientRights?: PatientRight[];
   activePatients: Patient[];
   onSendToOpdQueue: (prePatient: PreRegisteredPatient) => void;
 }
 
 export default function PreRegisterDirectory({
   availableServices,
+  availablePatientRights = [],
   activePatients,
   onSendToOpdQueue,
 }: PreRegisterDirectoryProps) {
@@ -328,12 +330,18 @@ export default function PreRegisterDirectory({
                 onChange={(e) => setRights(e.target.value)}
                 className="w-full border border-slate-300 rounded-xl px-3 py-2 outline-none focus:border-sky-500 text-xs font-semibold bg-white"
               >
-                <option value="บัตรทอง (UC)">บัตรทอง (UC)</option>
-                <option value="ประกันสังคม (SSO)">ประกันสังคม (SSO)</option>
-                <option value="ข้าราชการ/เบิกตรง (OFC)">ข้าราชการ/เบิกตรง (OFC)</option>
-                <option value="ชำระเงินเอง (Cash)">ชำระเงินเอง (Cash)</option>
-                <option value="ประกันสุขภาพเอกชน">ประกันสุขภาพเอกชน</option>
-                <option value="รัฐวิสาหกิจ">รัฐวิสาหกิจ</option>
+                {availablePatientRights && availablePatientRights.length > 0 ? (
+                  availablePatientRights.map((r) => (
+                    <option key={r.id} value={r.name}>{r.name}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="บัตรทอง (UC)">บัตรทอง (UC)</option>
+                    <option value="ประกันสังคม">ประกันสังคม</option>
+                    <option value="ข้าราชการ / เบิกตรง">ข้าราชการ / เบิกตรง</option>
+                    <option value="ชำระเงินเอง">ชำระเงินเอง</option>
+                  </>
+                )}
               </select>
             </div>
 

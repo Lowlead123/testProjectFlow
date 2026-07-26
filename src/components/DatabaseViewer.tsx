@@ -4,17 +4,18 @@
  */
 
 import React, { useState } from 'react';
-import { Patient, WorkflowStep } from '../types';
+import { Patient, WorkflowStep, PatientRight } from '../types';
 import { Search, Database, Download, Trash2, Edit2, CheckCircle2, AlertCircle, FileSpreadsheet, Eye, X, Check } from 'lucide-react';
 
 interface DatabaseViewerProps {
   patients: Patient[];
   workflowSteps: WorkflowStep[];
+  availablePatientRights?: PatientRight[];
   onDeletePatient: (id: string) => void;
   onEditPatient: (patient: Patient) => void;
 }
 
-export default function DatabaseViewer({ patients, workflowSteps, onDeletePatient, onEditPatient }: DatabaseViewerProps) {
+export default function DatabaseViewer({ patients, workflowSteps, availablePatientRights = [], onDeletePatient, onEditPatient }: DatabaseViewerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [rightsFilter, setRightsFilter] = useState('all');
@@ -283,10 +284,18 @@ export default function DatabaseViewer({ patients, workflowSteps, onDeletePatien
               className="font-sans text-xs px-3 py-2 rounded border border-gray-200 outline-none transition-colors bg-white focus:border-blue-500"
             >
               <option value="all">กรองตามสิทธิ์: ทั้งหมด</option>
-              <option value="บัตรทอง (UC)">บัตรทอง (UC)</option>
-              <option value="ประกันสังคม (SSS)">ประกันสังคม (SSS)</option>
-              <option value="จ่ายตรง/ข้าราชการ (CSD)">จ่ายตรง/ข้าราชการ (CSD)</option>
-              <option value="ชำระเงินเอง (Cash)">ชำระเงินเอง (Cash)</option>
+              {availablePatientRights && availablePatientRights.length > 0 ? (
+                availablePatientRights.map((r) => (
+                  <option key={r.id} value={r.name}>{r.name}</option>
+                ))
+              ) : (
+                <>
+                  <option value="บัตรทอง (UC)">บัตรทอง (UC)</option>
+                  <option value="ประกันสังคม">ประกันสังคม</option>
+                  <option value="ข้าราชการ / เบิกตรง">ข้าราชการ / เบิกตรง</option>
+                  <option value="ชำระเงินเอง">ชำระเงินเอง</option>
+                </>
+              )}
             </select>
           </div>
 

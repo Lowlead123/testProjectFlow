@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { Patient, ServiceTag, OverlayConfig, WorkflowStep, PreRegisteredPatient } from '../types';
+import { Patient, ServiceTag, OverlayConfig, WorkflowStep, PreRegisteredPatient, PatientRight } from '../types';
 import {
   Radio,
   Minimize2,
@@ -31,6 +31,8 @@ import {
   Users,
   Check,
   AlertCircle,
+  AlertTriangle,
+  CornerDownRight,
   RefreshCw
 } from 'lucide-react';
 
@@ -38,9 +40,11 @@ interface SignalOverlayProps {
   patients: Patient[];
   preRegisteredPatients?: PreRegisteredPatient[];
   availableServices: ServiceTag[];
+  availablePatientRights?: PatientRight[];
   overlayConfig?: OverlayConfig;
   currentStationId?: string;
   workflowSteps?: WorkflowStep[];
+  standbyStations?: string[];
   onToggleSignal: (
     patientId: string,
     field: 'opdStatus' | 'labStatus' | 'procedureStatus' | 'rightsStatus' | 'requestedServices',
@@ -79,6 +83,7 @@ export default function SignalOverlay({
   overlayConfig,
   currentStationId = 'all',
   workflowSteps = [],
+  standbyStations = [],
   onToggleSignal,
   onUpdateQuickNotes,
   onAdvancePatient,
@@ -88,6 +93,7 @@ export default function SignalOverlay({
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [overlayTab, setOverlayTab] = useState<'signals' | 'totals'>('signals');
   const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+  const [skippedWalkInId, setSkippedWalkInId] = useState<string | null>(null);
   const [customNote, setCustomNote] = useState<string>('');
   const [showFullDetails, setShowFullDetails] = useState<boolean>(true);
 
@@ -111,6 +117,18 @@ export default function SignalOverlay({
 
   // Station Filter / Standby Mode state
   const [stationFilter, setStationFilter] = useState<'all' | 'opdStatus' | 'labStatus' | 'procedureStatus' | 'rightsStatus'>('all');
+
+  // Auto-sync stationFilter with standbyStations or currentStationId
+  useEffect(() => {
+    if (standbyStations && standbyStations.length > 0) {
+      const activeStandbyStep = standbyStations.find((s) => s !== 'intake' && s !== 'database');
+      if (activeStandbyStep) {
+        setStationFilter(activeStandbyStep as any);
+      }
+    } else if (currentStationId && currentStationId !== 'all') {
+      setStationFilter(currentStationId as any);
+    }
+  }, [standbyStations, currentStationId]);
 
   // Today's date string (YYYY-MM-DD)
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -220,7 +238,7 @@ export default function SignalOverlay({
     return true;
   };
 
-  // Active patients (not completed) sorted strictly by createdAt ascending (Screening arrival order)
+  // Active patients (not completed) sorted strictly by arrival time (createdAt) according to standard queue
   const activePatients = patients
     .filter((p) => p.status !== 'completed')
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -229,6 +247,14 @@ export default function SignalOverlay({
   const readyPatients = activePatients.filter(
     (p) => isPatientReadyForStation(p, stationFilter) && !isStationDoneForPatient(p, stationFilter)
   );
+
+  // Check if current view is OPD / Intake station
+  const firstStepId = workflowSteps[0]?.id;
+  const isOpdStationView =
+    stationFilter === 'opdStatus' ||
+    stationFilter === 'intake' ||
+    (firstStepId && stationFilter === firstStepId) ||
+    (workflowSteps.length > 0 && workflowSteps[0] && stationFilter === workflowSteps[0].id);
 
   // Visible patients in queue for current station view
   const visibleQueuePatients = stationFilter === 'all' ? activePatients : readyPatients;
@@ -249,6 +275,63 @@ export default function SignalOverlay({
     : 0;
 
   const isCurrentFirstQueue = currentPatient && visibleQueuePatients[0] && currentPatient.id === visibleQueuePatients[0].id;
+
+  // Helper when user explicitly selects a patient from list/search:
+  // If leaving a pending Walk-In patient, remember their ID to auto-return when the skipped patient finishes
+  const handleSelectPatientWithSkipTrack = (newPatientId: string) => {
+    if (
+      currentPatient &&
+      currentPatient.id !== newPatientId &&
+      currentPatient.opdStatus === 'pending' &&
+      (currentPatient.isDirectWalkIn || currentPatient.hasPreRegistrationData === false)
+    ) {
+      setSkippedWalkInId(currentPatient.id);
+    }
+    setSelectedPatientId(newPatientId);
+  };
+
+  // Helper when an action is completed for a patient:
+  // Automatically return focus to the skipped Walk-In patient if their OPD is still pending!
+  const returnToPendingWalkInOrNext = (justCompletedPatientId?: string) => {
+    // If the patient just completed WAS the skipped walk-in patient, clear skippedWalkInId
+    if (justCompletedPatientId && justCompletedPatientId === skippedWalkInId) {
+      setSkippedWalkInId(null);
+      setSelectedPatientId('');
+      return;
+    }
+
+    // Check if there is a skipped or pending walk-in patient whose OPD is still pending
+    let targetWalkIn: Patient | undefined;
+    if (skippedWalkInId) {
+      targetWalkIn = activePatients.find(
+        (p) => p.id === skippedWalkInId && p.opdStatus === 'pending' && (p.isDirectWalkIn || p.hasPreRegistrationData === false)
+      );
+    }
+    if (!targetWalkIn) {
+      targetWalkIn = activePatients.find(
+        (p) => p.opdStatus === 'pending' && (p.isDirectWalkIn || p.hasPreRegistrationData === false)
+      );
+    }
+
+    if (targetWalkIn && targetWalkIn.id !== justCompletedPatientId) {
+      setSelectedPatientId(targetWalkIn.id);
+    } else {
+      setSelectedPatientId('');
+    }
+  };
+
+  // Helper to skip current Walk-In patient and advance to the next queue
+  const handleSkipCurrentPatient = () => {
+    if (!currentPatient) return;
+    if (currentPatient.opdStatus === 'pending' && (currentPatient.isDirectWalkIn || currentPatient.hasPreRegistrationData === false)) {
+      setSkippedWalkInId(currentPatient.id);
+    }
+    const currentIdx = visibleQueuePatients.findIndex((p) => p.id === currentPatient.id);
+    const nextPatient = visibleQueuePatients[currentIdx + 1] || visibleQueuePatients[0];
+    if (nextPatient && nextPatient.id !== currentPatient.id) {
+      setSelectedPatientId(nextPatient.id);
+    }
+  };
 
   // Dynamic Station Order mapped from workflowSteps (Settings)
   const orderedStations = useMemo(() => {
@@ -577,7 +660,7 @@ export default function SignalOverlay({
       }
     } else {
       onToggleSignal(patient.id, (stepId || 'rightsStatus') as any, 'closed');
-      setSelectedPatientId(null);
+      returnToPendingWalkInOrNext(patient.id);
     }
   };
 
@@ -676,382 +759,405 @@ export default function SignalOverlay({
   // Render content in Picture-in-Picture window (Sleek, modern & ultra-responsive)
   const renderPipContent = () => {
     return (
-      <div className="space-y-2.5 font-sans text-xs p-1 text-slate-100">
-        {/* PiP Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-2.5 rounded-xl border border-slate-700/80 shadow-md flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
+      <div className="flex flex-col h-screen max-h-screen bg-slate-900 text-slate-100 font-sans text-xs p-1.5 overflow-hidden">
+        {/* Header - Fixed Top */}
+        <div className="shrink-0 bg-slate-800/90 p-2 rounded-xl border border-slate-700/80 shadow-md flex items-center justify-between gap-2 mb-1">
+          <div className="flex items-center gap-1.5 overflow-hidden">
+            <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <div>
-              <h3 className="font-bold text-xs text-white flex items-center gap-1.5">
+            <div className="truncate">
+              <h3 className="font-bold text-[11px] text-white truncate flex items-center gap-1">
                 <span>🚨 ปลั๊กอินส่งซิกด่วน (Always On Top)</span>
               </h3>
-              <p className="text-[9px] text-slate-400">ส่งสัญญาณแผนกแบบ Real-time ข้ามหน้าต่าง</p>
+              {stationFilter !== 'all' && (
+                <span className="text-[9px] text-emerald-300 font-mono font-semibold">
+                  ⚡ สแตนบาย: {orderedStations.find(st => st.key === stationFilter || st.originalStep?.id === stationFilter)?.fullName || stationFilter}
+                </span>
+              )}
             </div>
           </div>
           <button
             type="button"
             onClick={closePipWindow}
-            className="text-slate-400 hover:text-white text-[10px] font-bold bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+            className="shrink-0 text-slate-400 hover:text-white text-[10px] font-bold bg-slate-700/60 hover:bg-slate-700 px-2 py-0.5 rounded border border-slate-600 cursor-pointer"
           >
             ✕ ปิด
           </button>
         </div>
 
-        {/* Station Standby Mode Tabs in PiP */}
-        <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700 space-y-1.5 shadow-sm">
-          <div className="flex items-center justify-between text-[10px] font-bold text-amber-300">
-            <span className="flex items-center gap-1">
-              <Activity className="w-3.5 h-3.5 text-amber-400" />
-              <span>โหมดสแตนบายแผนก:</span>
-            </span>
-            {stationFilter !== 'all' && (
-              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold font-mono">
-                ⚡ คิวพร้อม: {readyPatients.length} ราย
+        {/* Scrollable Middle Body */}
+        <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 scrollbar-thin">
+          {/* Station Standby Mode Select Dropdown */}
+          <div className="bg-slate-800/80 p-1.5 rounded-lg border border-slate-700/80 space-y-1">
+            <div className="flex items-center justify-between text-[10px] font-bold text-amber-300">
+              <span className="flex items-center gap-1">
+                <Activity className="w-3 h-3 text-amber-400" />
+                <span>แผนกที่สแตนบายอยู่:</span>
               </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-            {[
-              ...orderedStations.map((st) => ({ id: st.key, label: st.label, fullName: st.fullName })),
-              { id: 'all', label: '🌐 ทั้งหมด', fullName: 'ทุกแผนก' },
-            ].map((st) => {
-              const isActive = stationFilter === st.id;
-              const count = st.id === 'all'
-                ? activePatients.length
-                : activePatients.filter((p) => isPatientReadyForStation(p, st.id)).length;
+              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.2 rounded-full font-bold font-mono">
+                คิวพร้อม: {readyPatients.length} ราย
+              </span>
+            </div>
+            <select
+              value={stationFilter}
+              onChange={(e) => setStationFilter(e.target.value as any)}
+              className="w-full text-[11px] bg-slate-900 border border-amber-500/60 text-amber-200 font-bold rounded-md px-2 py-1 outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer shadow-inner font-sans"
+            >
+              {[
+                ...orderedStations.map((st) => ({ id: st.key, label: st.label, fullName: st.fullName })),
+                { id: 'all', label: '🌐 ทั้งหมด', fullName: 'ทุกแผนก (ดูภาพรวม)' },
+              ].map((st) => {
+                const count = st.id === 'all'
+                  ? activePatients.length
+                  : activePatients.filter((p) => isPatientReadyForStation(p, st.id)).length;
 
-              return (
-                <button
-                  key={st.id}
-                  type="button"
-                  onClick={() => setStationFilter(st.id as any)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer border ${
-                    isActive
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-md ring-1 ring-amber-300/50'
-                      : 'bg-slate-900 text-slate-300 border-slate-700/80 hover:bg-slate-750 hover:text-white'
-                  }`}
-                >
-                  <span>{st.label}</span>
-                  <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono ${
-                    isActive ? 'bg-slate-950/20 text-slate-950 font-black' : 'bg-slate-800 text-amber-300'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+                return (
+                  <option key={st.id} value={st.id} className="bg-slate-900 text-white font-sans">
+                    {st.id === stationFilter ? '⚡ ' : ''}{st.fullName} (คิวพร้อม: {count} ราย)
+                  </option>
+                );
+              })}
+            </select>
           </div>
-        </div>
 
-        {/* Search Bar in PiP */}
-        <div className="space-y-1">
+          {/* Search Input Bar */}
           <div className="relative">
             <input
               type="text"
               placeholder="🔍 เสิร์ช HN / เลขบัตร / ชื่อคนไข้..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-amber-500 font-sans shadow-inner"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-[11px] text-white placeholder:text-slate-500 outline-none focus:border-amber-500 font-sans shadow-inner"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1.5 text-slate-400 hover:text-white cursor-pointer"
+                className="absolute right-2 top-1 text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
+
+            {/* Search Dropdown */}
+            {cleanSearch !== '' && (
+              <div className="absolute top-full left-0 right-0 z-20 max-h-40 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg p-1 space-y-1 shadow-2xl mt-0.5">
+                {preMatches.length === 0 && activeMatches.length === 0 && completedMatches.length === 0 ? (
+                  <p className="text-[10px] text-slate-500 p-2 text-center">ไม่พบข้อมูลคนไข้ที่ตรงกัน</p>
+                ) : (
+                  <>
+                    {activeMatches.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedPatientId(p.id);
+                          setSearchQuery('');
+                        }}
+                        className="p-1.5 bg-slate-800 hover:bg-amber-950/80 border border-slate-700 rounded cursor-pointer transition-colors flex items-center justify-between text-[11px]"
+                      >
+                        <div>
+                          <span className="font-bold text-white block">{p.name} ({p.hn})</span>
+                          <span className="text-[9px] text-emerald-400 font-mono">คิวในระบบ</span>
+                        </div>
+                        <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.2 rounded font-bold">เลือก</span>
+                      </div>
+                    ))}
+                    {completedMatches.map((p) => (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedPatientId(p.id);
+                          setSearchQuery('');
+                        }}
+                        className="p-1.5 bg-blue-950/80 hover:bg-blue-900 border border-blue-700 rounded cursor-pointer transition-colors flex items-center justify-between text-[11px]"
+                      >
+                        <div>
+                          <span className="font-bold text-blue-200 block">{p.name} ({p.hn})</span>
+                          <span className="text-[9px] text-sky-300 font-mono">💳 ปิดสิทธิ์แล้ว</span>
+                        </div>
+                        <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.2 rounded font-bold">แก้ไข</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Search Dropdown in PiP Mode */}
-          {cleanSearch !== '' && (
-            <div className="max-h-44 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg p-1.5 space-y-1 shadow-2xl">
-              {preMatches.length === 0 && activeMatches.length === 0 && completedMatches.length === 0 ? (
-                <p className="text-[10px] text-slate-500 p-2 text-center">ไม่พบข้อมูลคนไข้ที่ตรงกัน</p>
-              ) : (
-                <>
-                  {activeMatches.map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        setSelectedPatientId(p.id);
-                        setSearchQuery('');
-                      }}
-                      className="p-2 bg-slate-800 hover:bg-amber-950/80 border border-slate-700 rounded-lg cursor-pointer transition-colors flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-bold text-white block">{p.name} ({p.hn})</span>
-                        <span className="text-[10px] text-emerald-400 font-mono">คิวในระบบ</span>
-                      </div>
-                      <span className="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">เลือกดู</span>
-                    </div>
-                  ))}
-                  {completedMatches.map((p) => (
-                    <div
-                      key={p.id}
-                      onClick={() => {
-                        setSelectedPatientId(p.id);
-                        setSearchQuery('');
-                      }}
-                      className="p-2 bg-blue-950/80 hover:bg-blue-900 border border-blue-700 rounded-lg cursor-pointer transition-colors flex items-center justify-between text-xs"
-                    >
-                      <div>
-                        <span className="font-bold text-blue-200 block">{p.name} ({p.hn})</span>
-                        <span className="text-[10px] text-sky-300 font-mono">💳 ปิดสิทธิ์แล้ว</span>
-                      </div>
-                      <span className="text-[9px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-bold">แก้ไข</span>
-                    </div>
-                  ))}
-                </>
+          {/* Queue Selector Dropdown */}
+          <div className="space-y-0.5">
+            <select
+              value={currentPatient?.id || ''}
+              onChange={(e) => handleSelectPatientWithSkipTrack(e.target.value)}
+              className="w-full text-[11px] bg-slate-800 border border-slate-700 text-white rounded-lg px-2 py-1 outline-none focus:border-sky-500 cursor-pointer shadow-xs font-semibold"
+            >
+              {currentPatient && !visibleQueuePatients.some((p) => p.id === currentPatient.id) && (
+                <option key={currentPatient.id} value={currentPatient.id}>
+                  {currentPatient.status === 'completed'
+                    ? `💳 [ปิดสิทธิ์] HN: ${currentPatient.hn} - ${currentPatient.name}`
+                    : `🔍 [ค้นพบ] HN: ${currentPatient.hn} - ${currentPatient.name}`}
+                </option>
               )}
-            </div>
-          )}
-        </div>
-
-        {/* Patient Queue Dropdown Selector in PiP */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            <span>
-              {stationFilter === 'all'
-                ? `1. คิวคนไข้ทั้งหมด (${activePatients.length} ราย):`
-                : `1. คิวพร้อมคีย์แผนกนี้ (${visibleQueuePatients.length} ราย):`}
-            </span>
+              {visibleQueuePatients.map((p, idx) => (
+                <option key={p.id} value={p.id}>
+                  ⚡ คิว #{idx + 1} - HN: {p.hn} - {p.name} ({p.rights})
+                </option>
+              ))}
+            </select>
           </div>
-          <select
-            value={currentPatient?.id || ''}
-            onChange={(e) => setSelectedPatientId(e.target.value)}
-            className="w-full text-xs bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 cursor-pointer shadow-sm"
-          >
-            {currentPatient && !visibleQueuePatients.some((p) => p.id === currentPatient.id) && (
-              <option key={currentPatient.id} value={currentPatient.id}>
-                {currentPatient.status === 'completed'
-                  ? `💳 [เคสปิดสิทธิ์แล้ว] HN: ${currentPatient.hn} - ${currentPatient.name}`
-                  : `🔍 [ค้นพบ] HN: ${currentPatient.hn} - ${currentPatient.name}`}
-              </option>
-            )}
-            {visibleQueuePatients.map((p, idx) => (
-              <option key={p.id} value={p.id}>
-                ⚡ คิว #{idx + 1} - HN: {p.hn} - {p.name} ({p.rights})
-              </option>
-            ))}
-          </select>
-        </div>
 
-        {/* Current Active Patient View in PiP */}
-        {currentPatient ? (
-          <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700 space-y-2.5 shadow-md">
-            {currentPatient.status === 'completed' && (
-              <div className="bg-blue-950/90 border border-blue-700/80 rounded-lg p-2 space-y-1 text-xs text-blue-200">
-                <div className="flex items-center justify-between font-bold">
-                  <span>💳 เคสนี้ปิดสิทธิ์สิ้นสุดบริการแล้ว</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onToggleSignal(currentPatient.id, 'rightsStatus', 'pending')}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 py-1 rounded-lg font-bold text-[11px] shadow cursor-pointer transition-colors flex items-center justify-center gap-1 border border-amber-300"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>↺ ยกเลิกปิดสิทธิ์ / ดึงกลับมาแก้ไข</span>
-                </button>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between border-b border-slate-700 pb-1.5">
-              <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-950 border border-sky-800 px-2 py-0.5 rounded-md">
-                HN: {currentPatient.hn}
-              </span>
-              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 rounded-md">
-                {currentPatient.status === 'completed' ? '💳 สิ้นสุดบริการ' : `คิวที่ #${currentQueueIndex}`}
-              </span>
-            </div>
-
-            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-700/80 space-y-2 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                <h4 className="font-bold text-xs text-white truncate max-w-[200px]">{currentPatient.name}</h4>
-                <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/90 px-2 py-0.5 rounded-full border border-emerald-700 shrink-0">
-                  สิทธิ์: {currentPatient.rights}
-                </span>
-              </div>
-
-              <div className="text-[10px] text-slate-300 font-mono space-y-1">
-                <div className="flex items-center justify-between">
-                  <span>🆔 เลขบัตร: <strong className="text-white">{currentPatient.citizenId || '-'}</strong></span>
-                  <span>อายุ: <strong className="text-white">{currentPatient.age || '-'} ปี</strong></span>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-slate-800 text-[10px]">
-                  <span className="text-emerald-300 font-bold">⚖️ น้ำหนัก: <strong className="text-white">{currentPatient.weight ? `${currentPatient.weight} kg` : '-'}</strong></span>
-                  <span className="text-emerald-300 font-bold">📏 ส่วนสูง: <strong className="text-white">{currentPatient.height ? `${currentPatient.height} cm` : '-'}</strong></span>
-                  <span className="text-amber-300 font-bold">🩺 BP: <strong className="text-white">{currentPatient.bloodPressure || '-'}</strong></span>
-                  <span className="text-rose-300 font-bold">❤️ ชีพจร: <strong className="text-white">{currentPatient.pulseRate ? `${currentPatient.pulseRate} bpm` : '-'}</strong></span>
-                </div>
-              </div>
-            </div>
-
-            {/* Primary Action Button for Selected Station in PiP */}
-            {stationFilter !== 'all' && (
-              (() => {
-                const activeStationObj = orderedStations.find(
-                  (st) => st.key === stationFilter || st.originalStep?.id === stationFilter
-                ) || (stationFilter === 'opdStatus' || stationFilter === 'step_1' ? orderedStations[0] : null);
-
-                if (!activeStationObj) return null;
-
-                const step = activeStationObj.originalStep;
-                const stepId = step?.id || activeStationObj.key;
-                const isDone = isStationDoneForPatient(currentPatient, activeStationObj.key) || isStationDoneForPatient(currentPatient, stepId);
-
-                const handlePrimaryClick = () => {
-                  if (activeStationObj.key === 'rightsStatus' || step?.actionType === 'close_rights_discharge') {
-                    handleCloseRightsAndAdvance(currentPatient, stepId);
-                  } else {
-                    const nextVal = isDone ? 'pending' : (activeStationObj.key === 'procedureStatus' ? 'sent' : 'opened');
-                    if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, activeStationObj.key as any)) return;
-                    onToggleSignal(currentPatient.id, (stepId || activeStationObj.key) as any, nextVal);
-                    if (nextVal !== 'pending') {
-                      setSelectedPatientId(null);
-                    }
-                  }
-                };
-
-                return (
+          {/* Integrated Patient Info Card */}
+          {currentPatient ? (
+            <div className="bg-slate-800/90 rounded-xl p-2.5 border border-slate-700/90 space-y-2 shadow-md">
+              {currentPatient.status === 'completed' && (
+                <div className="bg-blue-950/90 border border-blue-700/80 rounded-lg p-1.5 flex items-center justify-between text-[11px] text-blue-200">
+                  <span className="font-bold">💳 เคสนี้ปิดสิทธิ์แล้ว</span>
                   <button
                     type="button"
-                    onClick={handlePrimaryClick}
-                    className={`w-full py-2.5 px-3 rounded-xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
-                      isDone
-                        ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 animate-pulse'
-                    }`}
+                    onClick={() => onToggleSignal(currentPatient.id, 'rightsStatus', 'pending')}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-2 py-0.5 rounded font-bold text-[10px] shadow cursor-pointer transition-colors flex items-center gap-1 border border-amber-300"
                   >
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>
-                      {isDone
-                        ? `↺ ปลด/ยกเลิกสถานะ ${activeStationObj.label}`
-                        : `🟢 เสร็จสิ้น ${activeStationObj.label} (ส่งคิวถัดไป)`}
-                    </span>
+                    <RefreshCw className="w-3 h-3" />
+                    <span>↺ ยกเลิกปิดสิทธิ์</span>
                   </button>
-                );
-              })()
-            )}
+                </div>
+              )}
 
-            {/* Department Quick Buttons in PiP */}
-            <div className="space-y-1 pt-1 border-t border-slate-700">
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">2. ปุ่มส่งสัญญาณสเตชั่นแผนก:</span>
-              <div className="grid grid-cols-2 gap-1.5">
-                {orderedStations.filter((st) => isButtonEnabled(st.key) || isButtonEnabled(st.originalStep?.id || '')).map((st) => {
-                  const step = st.originalStep;
-                  const stepId = step?.id || st.key;
-                  const isAllowed = isActionAllowedForStation(st.key) || isActionAllowedForStation(stepId);
-                  const actionType = step?.actionType || overlayConfig?.actionTypes?.[stepId] || (st.key === 'rightsStatus' || step?.name.includes('ปิดสิทธิ์') ? 'close_rights_discharge' : 'step_complete');
-
-                  let isDone = false;
-                  if (st.key === 'opdStatus') isDone = currentPatient.opdStatus === 'opened';
-                  else if (st.key === 'labStatus') isDone = currentPatient.labStatus === 'opened' || currentPatient.labStatus === 'done';
-                  else if (st.key === 'procedureStatus') isDone = currentPatient.procedureStatus === 'sent' || currentPatient.procedureStatus === 'done';
-                  else if (st.key === 'rightsStatus') isDone = currentPatient.rightsStatus === 'closed';
-                  else if (step) {
-                    isDone = (currentPatient.history || []).some(h => h.stepId === step.id || h.stepName === step.name) ||
-                      (currentPatient as any)[step.id] === 'opened' ||
-                      (currentPatient as any)[step.id] === 'done' ||
-                      (currentPatient as any)[step.id] === 'closed';
-                  }
-
-                  const handleClick = () => {
-                    if (!isAllowed) {
-                      alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
-                      return;
-                    }
-
-                    if (actionType === 'close_rights_discharge' || st.key === 'rightsStatus') {
-                      handleCloseRightsAndAdvance(currentPatient, stepId);
-                    } else {
-                      const nextVal = isDone ? 'pending' : (st.key === 'procedureStatus' ? 'sent' : 'opened');
-                      if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, st.key as any)) return;
-                      onToggleSignal(currentPatient.id, (stepId || st.key) as any, nextVal);
-                      if (nextVal !== 'pending') {
-                        setSelectedPatientId(null);
-                      }
-                    }
-                  };
-
-                  const isFullWidth = actionType === 'close_rights_discharge' || st.key === 'rightsStatus';
-
-                  return (
+              {/* Walk-In / No OPD Data Warning Alert Banner: ONLY show when at OPD/Screening station AND OPD is still pending */}
+              {isOpdStationView && currentPatient.opdStatus === 'pending' && (currentPatient.isDirectWalkIn || currentPatient.hasPreRegistrationData === false) && (
+                <div className="bg-amber-950/90 border border-amber-500/80 rounded-lg p-2 text-[10px] text-amber-200 font-sans space-y-1 shadow-sm">
+                  <div className="flex items-center justify-between font-bold text-amber-300">
+                    <div className="flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
+                      <span>⚠️ คนไข้ Direct Walk-in (ยังไม่ได้เปิดบัตร OPD)</span>
+                    </div>
                     <button
-                      key={st.key}
-                      onClick={handleClick}
-                      className={`p-2 rounded-xl text-center text-[11px] font-bold border transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer ${
-                        isFullWidth ? 'col-span-2' : ''
-                      } ${
-                        !isAllowed
-                          ? 'opacity-40 bg-slate-950 border-slate-800 text-slate-500 cursor-not-allowed'
-                          : isDone
-                          ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 font-extrabold shadow'
-                          : 'bg-slate-900 border-slate-700/80 text-slate-300 hover:bg-slate-750 hover:text-white'
-                      }`}
+                      type="button"
+                      onClick={handleSkipCurrentPatient}
+                      className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded text-[9px] font-bold cursor-pointer transition-colors shrink-0"
                     >
-                      <span>{st.defaultIcon}</span>
-                      <span>{st.label}:</span>
-                      <span>{!isAllowed ? '🔒' : isDone ? (st.key === 'rightsStatus' ? '💳 เสร็จ' : '🟢 เสร็จ') : (st.key === 'rightsStatus' ? '⚪ ปิดสิทธิ์' : '⚪ ส่ง')}</span>
+                      ⏩ ข้ามคิวนี้ก่อน
                     </button>
-                  );
-                })}
-              </div>
-            </div>
+                  </div>
+                  <p className="text-[9px] text-amber-200/80 leading-tight">
+                    จุดคัดกรอง / OPD: คีย์เปิดบัตรได้ทันที | หากคลิกข้ามคิวทำคิวอื่นก่อน เมื่อทำคิวที่ข้ามเสร็จสิ้น ระบบจะสลับกลับมาคิว Walk-in นี้ให้อัตโนมัติ
+                  </p>
+                </div>
+              )}
 
-            {/* Service Tags with Check/Uncheck in PiP */}
-            {isButtonEnabled('requestedServices') && availableServices.length > 0 && (
-              <div className="pt-2 border-t border-slate-700 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">บริการพิเศษ (คลิกเพื่อติ๊ก/ปลดออก):</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {availableServices.map((srv) => {
-                    const isSelected = (currentPatient.requestedServices || []).includes(srv.name);
+              {skippedWalkInId === currentPatient.id && (
+                <div className="bg-sky-950/90 border border-sky-500/80 rounded-lg p-1.5 text-[9px] text-sky-200 font-sans flex items-center gap-1.5 shadow-sm">
+                  <CornerDownRight className="w-3.5 h-3.5 text-sky-400 shrink-0 animate-bounce" />
+                  <span className="font-bold">↩️ ระบบสลับกลับมาคิว Walk-in ที่ข้ามไว้ให้อัตโนมัติแล้ว!</span>
+                </div>
+              )}
+
+              {/* Patient Title & Identification Header */}
+              <div className="flex items-center justify-between border-b border-slate-700 pb-1 text-[11px]">
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="font-extrabold text-white text-xs truncate max-w-[170px]">{currentPatient.name}</span>
+                  <span className="text-[9px] text-emerald-300 font-bold bg-emerald-950/90 px-1.5 py-0.2 rounded-full border border-emerald-700/80 shrink-0">
+                    {currentPatient.rights}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-[9px] font-mono font-bold text-sky-300 bg-sky-950 border border-sky-800 px-1.5 py-0.2 rounded">
+                    HN: {currentPatient.hn}
+                  </span>
+                  <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950 border border-emerald-800 px-1.5 py-0.2 rounded">
+                    คิว #{currentQueueIndex}
+                  </span>
+                </div>
+              </div>
+
+              {/* Patient ID + Vitals Table Grid */}
+              <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-700/80 space-y-1.5 text-[10px] font-mono">
+                <div className="flex items-center justify-between text-slate-300 border-b border-slate-800/80 pb-1">
+                  <span>🆔 เลขบัตร: <strong className="text-white font-sans">{currentPatient.citizenId || '-'}</strong></span>
+                  <span>อายุ: <strong className="text-white font-sans">{currentPatient.age || '-'} ปี</strong> ({currentPatient.gender || 'ชาย'})</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-[10px]">
+                  <span className="text-emerald-300 font-bold">⚖️ น้ำหนัก: <strong className="text-white">{currentPatient.weight ? `${currentPatient.weight} kg` : '-'}</strong></span>
+                  <span className="text-emerald-300 font-bold">📏 ส่วนสูง: <strong className="text-white">{currentPatient.height ? `${currentPatient.height} cm` : '-'}</strong></span>
+                  <span className="text-amber-300 font-bold">🩺 ความดัน (BP): <strong className="text-white">{currentPatient.bloodPressure ? `${currentPatient.bloodPressure} mmHg` : '-'}</strong></span>
+                  <span className="text-rose-300 font-bold">❤️ ชีพจร (PR): <strong className="text-white">{currentPatient.pulseRate ? `${currentPatient.pulseRate} bpm` : '-'}</strong></span>
+                </div>
+
+                {/* 📌 INTEGRATED SERVICES & PLANNED CLINICAL SIGNALS SECTION */}
+                {isButtonEnabled('requestedServices') && availableServices.length > 0 && (
+                  <div className="pt-1.5 border-t border-slate-800 font-sans space-y-1">
+                    <span className="text-[10px] text-sky-300 font-bold block">
+                      ⚡ รายการบริการส่งซิกพิเศษที่คาดว่าจะต้องทำ (Planned Clinical Signals):
+                    </span>
+
+                    {/* Active Selected Services Badges (Clicking unticks/deletes) */}
+                    <div className="flex flex-wrap gap-1">
+                      {availableServices.map((srv) => {
+                        const isSelected = (currentPatient.requestedServices || []).includes(srv.name);
+                        return (
+                          <button
+                            key={srv.id}
+                            type="button"
+                            onClick={() => handleToggleService(currentPatient, srv.name)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                              isSelected
+                                ? 'bg-sky-500 text-slate-950 border-sky-300 shadow-xs'
+                                : 'bg-slate-900 text-slate-400 border-slate-700/80 hover:bg-slate-750 hover:text-white'
+                            }`}
+                            title={isSelected ? `คลิกเพื่อยกเลิก/ติ๊กออก ${srv.name}` : `คลิกเพื่อเลือก ${srv.name}`}
+                          >
+                            <span>{isSelected ? '✓' : '+'}</span>
+                            <span>{srv.name}</span>
+                            {isSelected && <span className="text-[9px] text-slate-950 font-black">✕</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Station Quick Signals Grid */}
+              <div className="space-y-1">
+                <span className="text-[9px] text-slate-400 font-bold uppercase block">สัญญาณแผนกอื่น:</span>
+                <div className="grid grid-cols-2 gap-1">
+                  {orderedStations.filter((st) => isButtonEnabled(st.key) || isButtonEnabled(st.originalStep?.id || '')).map((st) => {
+                    const step = st.originalStep;
+                    const stepId = step?.id || st.key;
+                    const isAllowed = isActionAllowedForStation(st.key) || isActionAllowedForStation(stepId);
+                    const actionType = step?.actionType || overlayConfig?.actionTypes?.[stepId] || (st.key === 'rightsStatus' || step?.name.includes('ปิดสิทธิ์') ? 'close_rights_discharge' : 'step_complete');
+
+                    let isDone = false;
+                    if (st.key === 'opdStatus') isDone = currentPatient.opdStatus === 'opened';
+                    else if (st.key === 'labStatus') isDone = currentPatient.labStatus === 'opened' || currentPatient.labStatus === 'done';
+                    else if (st.key === 'procedureStatus') isDone = currentPatient.procedureStatus === 'sent' || currentPatient.procedureStatus === 'done';
+                    else if (st.key === 'rightsStatus') isDone = currentPatient.rightsStatus === 'closed';
+                    else if (step) {
+                      isDone = (currentPatient.history || []).some(h => h.stepId === step.id || h.stepName === step.name) ||
+                        (currentPatient as any)[step.id] === 'opened' ||
+                        (currentPatient as any)[step.id] === 'done' ||
+                        (currentPatient as any)[step.id] === 'closed';
+                    }
+
+                    const handleClick = () => {
+                      if (!isAllowed) {
+                        alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
+                        return;
+                      }
+
+                      if (actionType === 'close_rights_discharge' || st.key === 'rightsStatus') {
+                        handleCloseRightsAndAdvance(currentPatient, stepId);
+                      } else {
+                        const nextVal = isDone ? 'pending' : (st.key === 'procedureStatus' ? 'sent' : 'opened');
+                        if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, st.key as any)) return;
+                        onToggleSignal(currentPatient.id, (stepId || st.key) as any, nextVal);
+                        if (nextVal !== 'pending') {
+                          returnToPendingWalkInOrNext(currentPatient.id);
+                        }
+                      }
+                    };
+
+                    const isFullWidth = actionType === 'close_rights_discharge' || st.key === 'rightsStatus';
+
                     return (
                       <button
-                        key={srv.id}
+                        key={st.key}
                         type="button"
-                        onClick={() => handleToggleService(currentPatient, srv.name)}
-                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
-                            : 'bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-750'
+                        onClick={handleClick}
+                        className={`py-1 px-1.5 rounded-lg text-center text-[10px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                          isFullWidth ? 'col-span-2' : ''
+                        } ${
+                          !isAllowed
+                            ? 'opacity-40 bg-slate-950 border-slate-800 text-slate-500 cursor-not-allowed'
+                            : isDone
+                            ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 font-extrabold shadow-xs'
+                            : 'bg-slate-900 border-slate-700/80 text-slate-300 hover:bg-slate-750 hover:text-white'
                         }`}
                       >
-                        {isSelected ? `✓ ${srv.name}` : `+ ${srv.name}`}
+                        <span>{st.defaultIcon}</span>
+                        <span>{st.label}:</span>
+                        <span>{!isAllowed ? '🔒' : isDone ? (st.key === 'rightsStatus' ? '💳 เสร็จ' : '🟢 เสร็จ') : (st.key === 'rightsStatus' ? '⚪ ปิดสิทธิ์' : '⚪ ส่ง')}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
-            )}
 
-            {/* Quick Notes Text Box in PiP */}
-            {isButtonEnabled('quickNotes') && (
-              <div className="pt-2 border-t border-slate-700 space-y-1">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">ข้อความส่งซิกด่วน:</span>
-                <input
-                  type="text"
-                  placeholder="พิมพ์ข้อความส่งซิกด่วน..."
-                  defaultValue={currentPatient.quickNotes || ''}
-                  key={currentPatient.id + '_notes_' + (currentPatient.quickNotes || '')}
-                  onBlur={(e) => onUpdateQuickNotes(currentPatient.id, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      onUpdateQuickNotes(currentPatient.id, e.currentTarget.value);
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-200 placeholder:text-slate-500 outline-none focus:border-amber-400 font-sans"
-                />
-              </div>
-            )}
+              {/* Quick Notes Text Box */}
+              {isButtonEnabled('quickNotes') && (
+                <div className="space-y-0.5">
+                  <span className="text-[9px] text-slate-400 font-bold uppercase block">ข้อความส่งซิกด่วน:</span>
+                  <input
+                    type="text"
+                    placeholder="พิมพ์ข้อความส่งซิกด่วน..."
+                    defaultValue={currentPatient.quickNotes || ''}
+                    key={currentPatient.id + '_notes_' + (currentPatient.quickNotes || '')}
+                    onBlur={(e) => onUpdateQuickNotes(currentPatient.id, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        onUpdateQuickNotes(currentPatient.id, e.currentTarget.value);
+                        e.currentTarget.blur();
+                      }
+                    }}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-amber-200 placeholder:text-slate-500 outline-none focus:border-amber-400 font-sans"
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-center text-slate-500 py-4 italic text-xs">ไม่มีคนไข้ในคิวส่งซิกขณะนี้</p>
+          )}
+        </div>
+
+        {/* 📌 STICKY FOOTER AT VERY BOTTOM FOR PRIMARY ACTION BUTTON */}
+        {currentPatient && stationFilter !== 'all' && (
+          <div className="shrink-0 mt-auto pt-1.5 border-t border-slate-700/80 bg-slate-900">
+            {(() => {
+              const activeStationObj = orderedStations.find(
+                (st) => st.key === stationFilter || st.originalStep?.id === stationFilter
+              ) || (stationFilter === 'opdStatus' || stationFilter === 'step_1' ? orderedStations[0] : null);
+
+              if (!activeStationObj) return null;
+
+              const step = activeStationObj.originalStep;
+              const stepId = step?.id || activeStationObj.key;
+              const isDone = isStationDoneForPatient(currentPatient, activeStationObj.key) || isStationDoneForPatient(currentPatient, stepId);
+
+              const handlePrimaryClick = () => {
+                if (activeStationObj.key === 'rightsStatus' || step?.actionType === 'close_rights_discharge') {
+                  handleCloseRightsAndAdvance(currentPatient, stepId);
+                } else {
+                  const nextVal = isDone ? 'pending' : (activeStationObj.key === 'procedureStatus' ? 'sent' : 'opened');
+                  if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, activeStationObj.key as any)) return;
+                  onToggleSignal(currentPatient.id, (stepId || activeStationObj.key) as any, nextVal);
+                  if (nextVal !== 'pending') {
+                    returnToPendingWalkInOrNext(currentPatient.id);
+                  }
+                }
+              };
+
+              return (
+                <button
+                  type="button"
+                  onClick={handlePrimaryClick}
+                  className={`w-full py-2 px-3 rounded-xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                    isDone
+                      ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 animate-pulse'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>
+                    {isDone
+                      ? `↺ ปลด/ยกเลิกสถานะ ${activeStationObj.label}`
+                      : `🟢 เสร็จสิ้น ${activeStationObj.label} (ส่งคิวถัดไป)`}
+                  </span>
+                </button>
+              );
+            })()}
           </div>
-        ) : (
-          <p className="text-center text-slate-500 py-4 italic text-xs">ไม่มีคนไข้ในคิวส่งซิกขณะนี้</p>
         )}
       </div>
     );
@@ -1084,7 +1190,7 @@ export default function SignalOverlay({
                     }
                     const next = opdFirstPatient.opdStatus === 'opened' ? 'pending' : 'opened';
                     onToggleSignal(opdFirstPatient.id, 'opdStatus', next);
-                    if (next !== 'pending') setSelectedPatientId(null);
+                    if (next !== 'pending') returnToPendingWalkInOrNext(opdFirstPatient.id);
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
                     opdFirstPatient.opdStatus === 'opened' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1103,7 +1209,7 @@ export default function SignalOverlay({
                     }
                     const next = opdFirstPatient.labStatus === 'opened' ? 'pending' : 'opened';
                     onToggleSignal(opdFirstPatient.id, 'labStatus', next);
-                    if (next !== 'pending') setSelectedPatientId(null);
+                    if (next !== 'pending') returnToPendingWalkInOrNext(opdFirstPatient.id);
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
                     opdFirstPatient.labStatus === 'opened' ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1122,7 +1228,7 @@ export default function SignalOverlay({
                     }
                     const next = opdFirstPatient.procedureStatus === 'sent' ? 'pending' : 'sent';
                     onToggleSignal(opdFirstPatient.id, 'procedureStatus', next);
-                    if (next !== 'pending') setSelectedPatientId(null);
+                    if (next !== 'pending') returnToPendingWalkInOrNext(opdFirstPatient.id);
                   }}
                   className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
                     opdFirstPatient.procedureStatus === 'sent' ? 'bg-amber-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -1567,7 +1673,7 @@ export default function SignalOverlay({
                         id="select-overlay-patient"
                         value={currentPatient?.id || ''}
                         onChange={(e) => {
-                          setSelectedPatientId(e.target.value);
+                          handleSelectPatientWithSkipTrack(e.target.value);
                           setIsEditingActivePatient(false);
                         }}
                         className="w-full font-sans text-xs bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2 outline-none focus:border-sky-500 transition-colors cursor-pointer"
@@ -1682,6 +1788,35 @@ export default function SignalOverlay({
                         </div>
                       )}
 
+                      {/* Walk-In Warning Alert Banner in Main Drawer */}
+                      {isOpdStationView && currentPatient.opdStatus === 'pending' && (currentPatient.isDirectWalkIn || currentPatient.hasPreRegistrationData === false) && (
+                        <div className="bg-amber-950/90 border border-amber-500/80 rounded-xl p-2.5 text-xs text-amber-200 font-sans space-y-1 shadow-sm">
+                          <div className="flex items-center justify-between font-bold text-amber-300">
+                            <div className="flex items-center gap-1.5">
+                              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                              <span>⚠️ คนไข้ Direct Walk-in (ยังไม่ได้เปิดบัตร OPD)</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleSkipCurrentPatient}
+                              className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-2 py-0.5 rounded text-[10px] font-bold transition-all shadow cursor-pointer flex items-center gap-1 border border-amber-300 shrink-0"
+                            >
+                              <span>⏩ ข้ามคิวนี้ก่อน</span>
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                            สามารถคีย์เปิดบัตร OPD ได้ทันที | หากกดข้ามคิวเพื่อทำคิวอื่นก่อน เมื่อทำคิวที่ข้ามเสร็จสิ้นแล้ว ระบบจะสลับกลับมาคิว Walk-in นี้ให้อัตโนมัติ เพื่อป้องกันคิวตกค้าง
+                          </p>
+                        </div>
+                      )}
+
+                      {skippedWalkInId === currentPatient.id && (
+                        <div className="bg-sky-950/90 border border-sky-500/80 rounded-xl p-2 text-xs text-sky-200 font-sans flex items-center gap-2 shadow-sm">
+                          <CornerDownRight className="w-4 h-4 text-sky-400 shrink-0 animate-bounce" />
+                          <span className="font-bold">↩️ ระบบสลับกลับมาหน้าคิว Walk-in ที่ข้ามไปก่อนหน้านี้ให้โดยอัตโนมัติแล้ว!</span>
+                        </div>
+                      )}
+
                       {/* Patient Summary Header & Vital Signs Bar (Always Visible) */}
                       <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700 space-y-2 text-xs">
                         <div className="flex items-center justify-between border-b border-slate-700/70 pb-1.5">
@@ -1702,59 +1837,38 @@ export default function SignalOverlay({
                           <div><span className="text-slate-400 text-[10px] block">ความดัน (BP):</span> <strong className="text-amber-300">{currentPatient.bloodPressure ? `${currentPatient.bloodPressure} mmHg` : '-'}</strong></div>
                           <div><span className="text-slate-400 text-[10px] block">ชีพจร (PR):</span> <strong className="text-rose-300">{currentPatient.pulseRate ? `${currentPatient.pulseRate} bpm` : '-'}</strong></div>
                         </div>
+
+                        {/* 📌 INTEGRATED SERVICES & PLANNED CLINICAL SIGNALS SECTION */}
+                        {isButtonEnabled('requestedServices') && availableServices.length > 0 && (
+                          <div className="pt-2 border-t border-slate-700/60 font-sans space-y-1">
+                            <span className="text-[10px] text-sky-300 font-bold block">
+                              ⚡ รายการบริการส่งซิกพิเศษที่คาดว่าจะต้องทำ (Planned Clinical Signals):
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {availableServices.map((srv) => {
+                                const isSelected = (currentPatient.requestedServices || []).includes(srv.name);
+                                return (
+                                  <button
+                                    key={srv.id}
+                                    type="button"
+                                    onClick={() => handleToggleService(currentPatient, srv.name)}
+                                    className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 border ${
+                                      isSelected
+                                        ? 'bg-sky-500 text-slate-950 border-sky-300 shadow-xs'
+                                        : 'bg-slate-900 text-slate-400 border-slate-700/80 hover:bg-slate-750 hover:text-white'
+                                    }`}
+                                    title={isSelected ? `คลิกเพื่อยกเลิก/ติ๊กออก ${srv.name}` : `คลิกเพื่อเลือก ${srv.name}`}
+                                  >
+                                    <span>{isSelected ? '✓' : '+'}</span>
+                                    <span>{srv.name}</span>
+                                    {isSelected && <span className="text-[9px] text-slate-950 font-black">✕</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
-
-                      {/* Primary Standby Action Button for Active Station */}
-                      {stationFilter !== 'all' && (
-                        (() => {
-                          const activeStationObj = orderedStations.find(
-                            (st) => st.key === stationFilter || st.originalStep?.id === stationFilter
-                          ) || (stationFilter === 'opdStatus' || stationFilter === 'step_1' ? orderedStations[0] : null);
-
-                          if (!activeStationObj) return null;
-
-                          const step = activeStationObj.originalStep;
-                          const stepId = step?.id || activeStationObj.key;
-                          const isDone = isStationDoneForPatient(currentPatient, activeStationObj.key) || isStationDoneForPatient(currentPatient, stepId);
-
-                          const handlePrimaryClick = () => {
-                            if (!isActionAllowedForStation(activeStationObj.key) && (!step || !isActionAllowedForStation(step.id))) {
-                              alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
-                              return;
-                            }
-
-                            if (activeStationObj.key === 'rightsStatus' || step?.actionType === 'close_rights_discharge') {
-                              handleCloseRightsAndAdvance(currentPatient, stepId);
-                            } else {
-                              const nextVal = isDone ? 'pending' : (activeStationObj.key === 'procedureStatus' ? 'sent' : 'opened');
-                              if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, activeStationObj.key as any)) return;
-                              onToggleSignal(currentPatient.id, (stepId || activeStationObj.key) as any, nextVal);
-                              if (nextVal !== 'pending') {
-                                setSelectedPatientId(null);
-                              }
-                            }
-                          };
-
-                          return (
-                            <button
-                              type="button"
-                              onClick={handlePrimaryClick}
-                              className={`w-full py-2.5 px-4 rounded-xl font-black text-xs md:text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer border ${
-                                isDone
-                                  ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400'
-                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 animate-pulse'
-                              }`}
-                            >
-                              <CheckCircle2 className="w-5 h-5 shrink-0" />
-                              <span>
-                                {isDone
-                                  ? `↺ ยกเลิก / ปลดสถานะ ${activeStationObj.fullName}`
-                                  : `🟢 กดเสร็จสิ้นขั้นตอน ${activeStationObj.fullName} (ส่งคิวถัดไป)`}
-                              </span>
-                            </button>
-                          );
-                        })()
-                      )}
 
                       {/* Patient Detailed Accordion */}
                       {showFullDetails && (
@@ -1944,7 +2058,7 @@ export default function SignalOverlay({
                                   const nextVal = isDone ? 'pending' : (st.key === 'procedureStatus' ? 'sent' : 'opened');
                                   onToggleSignal(currentPatient.id, (step?.id || st.key) as any, nextVal);
                                   if (nextVal !== 'pending') {
-                                    setSelectedPatientId(null);
+                                    returnToPendingWalkInOrNext(currentPatient.id);
                                   }
                                 }
                               };
@@ -1999,44 +2113,11 @@ export default function SignalOverlay({
                           </div>
                         </div>
 
-                      {/* Service Tags */}
-                      {isButtonEnabled('requestedServices') && availableServices.length > 0 && (
-                        <div className="space-y-1.5 pt-2 border-t border-slate-800">
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                            <span>3. ติ๊กซิกบริการพิเศษ:</span>
-                            {!isActionAllowedForStation('requestedServices') && (
-                              <span className="text-[9px] text-rose-400 font-normal">🔒 แผนกนี้ถูกปิดสิทธิ์บริการ</span>
-                            )}
-                          </label>
-                          <div className="flex flex-wrap gap-1.5">
-                            {availableServices.map((srv) => {
-                              const isSelected = (currentPatient.requestedServices || []).includes(srv.name);
-                              const isSrvAllowed = isActionAllowedForStation('requestedServices');
-                              return (
-                                <button
-                                  key={srv.id}
-                                  onClick={() => handleToggleService(currentPatient, srv.name)}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                    !isSrvAllowed
-                                      ? 'bg-slate-900 border border-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
-                                      : isSelected
-                                      ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
-                                      : 'bg-slate-800 text-slate-300 hover:bg-slate-750 border border-slate-700'
-                                  }`}
-                                >
-                                  {isSelected ? `✓ ${srv.name}` : `+ ${srv.name}`}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
                       {/* Custom Signal Note Bar */}
                       {isButtonEnabled('quickNotes') && onUpdateQuickNotes && (
                         <div className="pt-2 border-t border-slate-800 space-y-1">
                           <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                            <span>4. พิมพ์ข้อความส่งซิกด่วน:</span>
+                            <span>3. พิมพ์ข้อความส่งซิกด่วน:</span>
                             {!isActionAllowedForStation('quickNotes') && (
                               <span className="text-[9px] text-rose-400 font-normal">🔒 แผนกนี้ถูกปิดสิทธิ์พิมพ์โน้ต</span>
                             )}
@@ -2070,6 +2151,60 @@ export default function SignalOverlay({
                           </div>
                         </div>
                       )}
+
+                      {/* 📌 Primary Standby Action Button at VERY BOTTOM of active patient card */}
+                      {stationFilter !== 'all' && (
+                        (() => {
+                          const activeStationObj = orderedStations.find(
+                            (st) => st.key === stationFilter || st.originalStep?.id === stationFilter
+                          ) || (stationFilter === 'opdStatus' || stationFilter === 'step_1' ? orderedStations[0] : null);
+
+                          if (!activeStationObj) return null;
+
+                          const step = activeStationObj.originalStep;
+                          const stepId = step?.id || activeStationObj.key;
+                          const isDone = isStationDoneForPatient(currentPatient, activeStationObj.key) || isStationDoneForPatient(currentPatient, stepId);
+
+                          const handlePrimaryClick = () => {
+                            if (!isActionAllowedForStation(activeStationObj.key) && (!step || !isActionAllowedForStation(step.id))) {
+                              alert(`🔒 สิทธิ์ถูกจำกัด\nคุณสามารถดำเนินการหรือยกเลิกได้เฉพาะในส่วนของแผนกตัวเองเท่านั้น`);
+                              return;
+                            }
+
+                            if (activeStationObj.key === 'rightsStatus' || step?.actionType === 'close_rights_discharge') {
+                              handleCloseRightsAndAdvance(currentPatient, stepId);
+                            } else {
+                              const nextVal = isDone ? 'pending' : (activeStationObj.key === 'procedureStatus' ? 'sent' : 'opened');
+                              if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, activeStationObj.key as any)) return;
+                              onToggleSignal(currentPatient.id, (stepId || activeStationObj.key) as any, nextVal);
+                              if (nextVal !== 'pending') {
+                                setSelectedPatientId(null);
+                              }
+                            }
+                          };
+
+                          return (
+                            <div className="pt-2 border-t border-slate-800">
+                              <button
+                                type="button"
+                                onClick={handlePrimaryClick}
+                                className={`w-full py-2.5 px-4 rounded-xl font-black text-xs md:text-sm shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer border ${
+                                  isDone
+                                    ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400'
+                                    : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 animate-pulse'
+                                }`}
+                              >
+                                <CheckCircle2 className="w-5 h-5 shrink-0" />
+                                <span>
+                                  {isDone
+                                    ? `↺ ยกเลิก / ปลดสถานะ ${activeStationObj.fullName}`
+                                    : `🟢 กดเสร็จสิ้นขั้นตอน ${activeStationObj.fullName} (ส่งคิวถัดไป)`}
+                                </span>
+                              </button>
+                            </div>
+                          );
+                        })()
+                      )}
                     </div>
                   )}
                 </>
@@ -2087,30 +2222,25 @@ export default function SignalOverlay({
                       </span>
                     </div>
 
+                    {/* Dynamic Station Counters linked with real workflow steps */}
                     <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
-                      <div className="bg-slate-900 p-2 rounded-lg border border-slate-700 text-center">
-                        <span className="text-[9px] text-slate-400 block font-sans">🟢 เปิด OPD แล้ว</span>
-                        <span className="text-lg font-black text-emerald-400">{todayOpdOpenedCount}</span>
-                        <span className="text-[9px] text-slate-500 block font-sans">คน</span>
-                      </div>
+                      {orderedStations.map((st) => {
+                        const step = st.originalStep;
+                        const stepId = step?.id || st.key;
+                        const count = todayPatients.filter((p) =>
+                          isStationDoneForPatient(p, st.key) || isStationDoneForPatient(p, stepId)
+                        ).length;
 
-                      <div className="bg-slate-900 p-2 rounded-lg border border-slate-700 text-center">
-                        <span className="text-[9px] text-slate-400 block font-sans">🧪 ตรวจแล็บเสร็จ</span>
-                        <span className="text-lg font-black text-purple-400">{todayLabDoneCount}</span>
-                        <span className="text-[9px] text-slate-500 block font-sans">คน</span>
-                      </div>
-
-                      <div className="bg-slate-900 p-2 rounded-lg border border-slate-700 text-center">
-                        <span className="text-[9px] text-slate-400 block font-sans">🩹 ทำหัตถการเสร็จ</span>
-                        <span className="text-lg font-black text-amber-400">{todayProcedureDoneCount}</span>
-                        <span className="text-[9px] text-slate-500 block font-sans">คน</span>
-                      </div>
-
-                      <div className="bg-slate-900 p-2 rounded-lg border border-slate-700 text-center">
-                        <span className="text-[9px] text-slate-400 block font-sans">💳 ปิดสิทธิ์เรียบร้อย</span>
-                        <span className="text-lg font-black text-blue-400">{todayRightsClosedCount}</span>
-                        <span className="text-[9px] text-slate-500 block font-sans">คน</span>
-                      </div>
+                        return (
+                          <div key={st.key} className="bg-slate-900 p-2 rounded-lg border border-slate-700 text-center">
+                            <span className="text-[9px] text-slate-400 block font-sans truncate">
+                              {st.defaultIcon} {step?.name || st.fullName.replace(/^\d+\.\s*/, '')}
+                            </span>
+                            <span className="text-lg font-black text-emerald-400">{count}</span>
+                            <span className="text-[9px] text-slate-500 block font-sans">คน</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -2140,36 +2270,110 @@ export default function SignalOverlay({
                     {todayPatients.length === 0 ? (
                       <p className="text-xs text-slate-500 italic py-2 text-center">ยังไม่มีประวัติคนไข้วันนี้</p>
                     ) : (
-                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-                        {todayPatients.map((p, idx) => (
-                          <div key={p.id} className="bg-slate-900 p-2 rounded-lg border border-slate-750 space-y-1 text-xs">
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-white">#{idx + 1} {p.name}</span>
-                              <span className="text-[10px] font-mono text-sky-300 font-bold bg-sky-950 px-1.5 rounded border border-sky-800">
-                                {p.hn}
-                              </span>
-                            </div>
+                      <div className="max-h-56 overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+                        {todayPatients.map((p, idx) => {
+                          // Get exact list of departments/stations that serviced this patient today (recorded snapshot names)
+                          const history = p.history || [];
+                          const receivedServices: { name: string; icon: string; time?: string }[] = [];
 
-                            <div className="flex items-center justify-between text-[10px] text-slate-400">
-                              <span>สิทธิ์: {p.rights}</span>
-                              <div className="flex items-center gap-1 font-mono">
-                                <span>OPD: {p.opdStatus === 'opened' ? '🟢' : '⚪'}</span>
-                                <span>LAB: {p.labStatus === 'opened' ? '🧪' : '⚪'}</span>
-                                <span>RIGHTS: {p.rightsStatus === 'closed' ? '💳' : '⚪'}</span>
-                              </div>
-                            </div>
+                          if (history.length > 0) {
+                            history.forEach((h) => {
+                              if (h.stepName && !receivedServices.some((s) => s.name === h.stepName)) {
+                                let icon = '🟢';
+                                const nameLower = h.stepName.toLowerCase();
+                                if (nameLower.includes('แล็บ') || nameLower.includes('เจาะ') || nameLower.includes('lab')) icon = '🧪';
+                                else if (nameLower.includes('หัตถการ') || nameLower.includes('แผล') || nameLower.includes('ฉีด') || nameLower.includes('proc')) icon = '🩹';
+                                else if (nameLower.includes('สิทธิ์') || nameLower.includes('ปิด') || nameLower.includes('การเงิน') || nameLower.includes('right')) icon = '💳';
+                                else if (nameLower.includes('opd') || nameLower.includes('เปิด') || nameLower.includes('ซักประวัติ')) icon = '🏥';
 
-                            {(p.requestedServices || []).length > 0 && (
-                              <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-800">
-                                {p.requestedServices!.map((s, sIdx) => (
-                                  <span key={sIdx} className="text-[9px] bg-slate-800 text-sky-300 px-1.5 py-0.2 rounded border border-slate-700">
-                                    {s}
+                                receivedServices.push({
+                                  name: h.stepName,
+                                  icon,
+                                  time: h.completedAt ? new Date(h.completedAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : undefined,
+                                });
+                              }
+                            });
+                          }
+
+                          orderedStations.forEach((st) => {
+                            const step = st.originalStep;
+                            const stepId = step?.id || st.key;
+                            const cleanName = step?.name || st.fullName.replace(/^\d+\.\s*/, '');
+
+                            const isDone = isStationDoneForPatient(p, st.key) || isStationDoneForPatient(p, stepId);
+
+                            if (isDone) {
+                              if (!receivedServices.some((s) => s.name.toLowerCase() === cleanName.toLowerCase() || s.name.toLowerCase().includes(cleanName.toLowerCase()))) {
+                                receivedServices.push({
+                                  name: cleanName,
+                                  icon: st.defaultIcon || '🟢',
+                                });
+                              }
+                            }
+                          });
+
+                          return (
+                            <div key={p.id} className="bg-slate-900 p-2.5 rounded-lg border border-slate-750 space-y-1.5 text-xs">
+                              {/* Header: Name, HN & Status */}
+                              <div className="flex items-center justify-between border-b border-slate-800 pb-1">
+                                <span className="font-bold text-white text-xs">#{idx + 1} {p.name}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-mono text-sky-300 font-bold bg-sky-950 px-1.5 py-0.2 rounded border border-sky-800">
+                                    HN: {p.hn}
                                   </span>
-                                ))}
+                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                                    p.status === 'completed' ? 'bg-blue-950 text-blue-300 border border-blue-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                                  }`}>
+                                    {p.status === 'completed' ? '💳 ปิดสิทธิ์แล้ว' : '⚡ อยู่ในระบบ'}
+                                  </span>
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        ))}
+
+                              {/* Rights Info */}
+                              <div className="flex items-center justify-between text-[11px] text-slate-300">
+                                <span>สิทธิ์การรักษา: <strong className="text-amber-300 font-semibold">{p.rights}</strong></span>
+                              </div>
+
+                              {/* Linked Departments/Stations Serviced Today */}
+                              <div className="space-y-1 pt-1 border-t border-slate-800/80">
+                                <span className="text-[10px] font-bold text-slate-400 block">
+                                  🏥 รายการบริการ/แผนกที่เข้ารับบริการจริงวันนี้:
+                                </span>
+                                {receivedServices.length === 0 ? (
+                                  <span className="text-[10px] text-slate-500 italic block">ยังไม่มีการลงทะเบียนแผนก</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1">
+                                    {receivedServices.map((srv, sIdx) => (
+                                      <span
+                                        key={sIdx}
+                                        className="text-[10px] bg-slate-800 text-emerald-300 border border-emerald-700/60 px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1 shadow-xs"
+                                        title={srv.time ? `เสร็จสิ้นเวลา ${srv.time} น.` : 'เสร็จสิ้น'}
+                                      >
+                                        <span>{srv.icon}</span>
+                                        <span>{srv.name}</span>
+                                        {srv.time && <span className="text-[9px] text-slate-400 font-normal">({srv.time})</span>}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Requested Special Services */}
+                              {(p.requestedServices || []).length > 0 && (
+                                <div className="space-y-1 pt-1 border-t border-slate-800/80">
+                                  <span className="text-[10px] text-sky-300 font-bold block">⚡ บริการพิเศษเพิ่มเติม:</span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {p.requestedServices!.map((s, sIdx) => (
+                                      <span key={sIdx} className="text-[9px] bg-sky-950 text-sky-300 px-1.5 py-0.2 rounded border border-sky-800 font-mono">
+                                        ✓ {s}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
