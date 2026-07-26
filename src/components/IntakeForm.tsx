@@ -317,7 +317,12 @@ export default function IntakeForm({
     setBmiResult(null);
 
     setSubmitSuccess(true);
-    setTimeout(() => setSubmitSuccess(false), 4000);
+    setTimeout(() => setSubmitSuccess(false), 5000);
+
+    const containerEl = document.getElementById('screening-point-container');
+    if (containerEl) {
+      containerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   return (

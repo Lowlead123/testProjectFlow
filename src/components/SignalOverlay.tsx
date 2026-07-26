@@ -580,6 +580,36 @@ export default function SignalOverlay({
     }
   };
 
+  // Helper to sync all styles and stylesheets to popout window
+  const syncStylesToPopout = (targetDoc: Document) => {
+    if (!targetDoc) return;
+    try {
+      // 1. Clone all existing style and link stylesheet nodes from parent
+      const styleNodes = document.querySelectorAll('link[rel="stylesheet"], style');
+      styleNodes.forEach((node) => {
+        try {
+          targetDoc.head.appendChild(node.cloneNode(true));
+        } catch (err) {}
+      });
+
+      // 2. Fallback to reading cssRules for dynamically injected stylesheets
+      Array.from(document.styleSheets).forEach((styleSheet: CSSStyleSheet) => {
+        try {
+          if (!styleSheet.href && styleSheet.cssRules) {
+            const cssRules = Array.from(styleSheet.cssRules)
+              .map((rule) => rule.cssText)
+              .join('\n');
+            const style = targetDoc.createElement('style');
+            style.textContent = cssRules;
+            targetDoc.head.appendChild(style);
+          }
+        } catch (e) {}
+      });
+    } catch (err) {
+      console.warn('Error syncing styles to popout:', err);
+    }
+  };
+
   // Document Picture-in-Picture window launcher
   const handleOpenPipWindow = async () => {
     const isTopLevelWindow = typeof window !== 'undefined' && window.self === window.top;
@@ -588,41 +618,15 @@ export default function SignalOverlay({
       try {
         // @ts-ignore
         const pip = await window.documentPictureInPicture.requestWindow({
-          width: 480,
-          height: 520,
+          width: 500,
+          height: 600,
         });
 
         if (pip && pip.document) {
-          Array.from(document.styleSheets).forEach((styleSheet: CSSStyleSheet) => {
-            try {
-              if (styleSheet.href) {
-                const link = pip.document.createElement('link');
-                link.rel = 'stylesheet';
-                link.href = styleSheet.href;
-                pip.document.head.appendChild(link);
-              } else {
-                const cssRules = Array.from(styleSheet.cssRules || [])
-                  .map((rule) => rule.cssText)
-                  .join('');
-                const style = pip.document.createElement('style');
-                style.textContent = cssRules;
-                pip.document.head.appendChild(style);
-              }
-            } catch (e) {
-              if (styleSheet.href && pip.document?.head) {
-                try {
-                  const link = pip.document.createElement('link');
-                  link.rel = 'stylesheet';
-                  link.href = styleSheet.href;
-                  pip.document.head.appendChild(link);
-                } catch (linkErr) {}
-              }
-            }
-          });
-
+          syncStylesToPopout(pip.document);
           pip.document.title = '🚨 ปลั๊กอินส่งซิกด่วน (Always On Top)';
           if (pip.document.body) {
-            pip.document.body.className = 'bg-slate-900 text-white font-sans p-3 overflow-y-auto';
+            pip.document.body.className = 'bg-slate-900 text-white font-sans p-2.5 overflow-y-auto select-none';
           }
 
           pip.addEventListener('pagehide', () => {
@@ -646,29 +650,13 @@ export default function SignalOverlay({
       const pop = window.open(
         '',
         'SignalOverlayPopout',
-        'width=480,height=540,resizable=yes,scrollbars=yes'
+        'width=500,height=600,resizable=yes,scrollbars=yes'
       );
       if (pop && pop.document) {
-        Array.from(document.styleSheets).forEach((styleSheet: CSSStyleSheet) => {
-          try {
-            if (styleSheet.href) {
-              const link = pop.document.createElement('link');
-              link.rel = 'stylesheet';
-              link.href = styleSheet.href;
-              pop.document.head.appendChild(link);
-            } else {
-              const cssRules = Array.from(styleSheet.cssRules || [])
-                .map((rule) => rule.cssText)
-                .join('');
-              const style = pop.document.createElement('style');
-              style.textContent = cssRules;
-              pop.document.head.appendChild(style);
-            }
-          } catch (e) {}
-        });
+        syncStylesToPopout(pop.document);
         pop.document.title = '🚨 ปลั๊กอินส่งซิกด่วน (Always On Top)';
         if (pop.document.body) {
-          pop.document.body.className = 'bg-slate-900 text-white font-sans p-3 overflow-y-auto';
+          pop.document.body.className = 'bg-slate-900 text-white font-sans p-2.5 overflow-y-auto select-none';
         }
         setPipWindow(pop);
       }
@@ -684,153 +672,50 @@ export default function SignalOverlay({
     }
   };
 
-  // Render content in Picture-in-Picture window (Ultra-compact & fast)
+  // Render content in Picture-in-Picture window (Sleek, modern & ultra-responsive)
   const renderPipContent = () => {
     return (
-      <div className="space-y-2.5 font-sans text-xs p-1">
+      <div className="space-y-2.5 font-sans text-xs p-1 text-slate-100">
         {/* PiP Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
-            <h3 className="font-bold text-xs text-white flex items-center gap-1.5">
-              <span>🚨 ปลั๊กอินส่งซิกด่วน (Always-On-Top Window)</span>
-            </h3>
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 p-2.5 rounded-xl border border-slate-700/80 shadow-md flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <div>
+              <h3 className="font-bold text-xs text-white flex items-center gap-1.5">
+                <span>🚨 ปลั๊กอินส่งซิกด่วน (Always On Top)</span>
+              </h3>
+              <p className="text-[9px] text-slate-400">ส่งสัญญาณแผนกแบบ Real-time ข้ามหน้าต่าง</p>
+            </div>
           </div>
           <button
+            type="button"
             onClick={closePipWindow}
-            className="text-slate-400 hover:text-white text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded transition-colors"
+            className="text-slate-400 hover:text-white text-[10px] font-bold bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded-lg border border-slate-700 transition-colors cursor-pointer"
           >
-            ปิด
+            ✕ ปิด
           </button>
         </div>
 
-        {/* Search Bar in PiP */}
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="เสิร์ช HN, เลขบัตร หรือชื่อคนไข้..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-sky-500 font-sans"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1.5 text-slate-400 hover:text-white"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Search Results in PiP */}
-        {cleanSearch && (
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-2 max-h-40 overflow-y-auto space-y-1">
-            {preMatches.map((pre) => (
-              <div
-                key={pre.id}
-                onClick={() => {
-                  handleSelectPrePatient(pre);
-                  setSearchQuery('');
-                }}
-                className="p-1.5 bg-sky-950/80 hover:bg-sky-900 border border-sky-800 rounded cursor-pointer text-xs flex justify-between items-center"
-              >
-                <div>
-                  <span className="font-bold text-sky-200 block">{pre.name} (ล่วงหน้า)</span>
-                  <span className="text-[10px] text-slate-400">HN: {pre.hn}</span>
-                </div>
-                <span className="text-[9px] bg-sky-600 text-white px-1.5 py-0.5 rounded font-bold">เปิด OPD</span>
-              </div>
-            ))}
-
-            {activeMatches.map((p) => (
-              <div
-                key={p.id}
-                onClick={() => {
-                  setSelectedPatientId(p.id);
-                  setSearchQuery('');
-                }}
-                className="p-1.5 bg-slate-900 hover:bg-slate-750 border border-slate-700 rounded cursor-pointer text-xs flex justify-between items-center"
-              >
-                <div>
-                  <span className="font-bold text-white block">{p.name} ({p.hn})</span>
-                  <span className="text-[10px] text-slate-400 font-mono">สิทธิ์: {p.rights}</span>
-                </div>
-                <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">เลือกคิว</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Selected Pre-Registered Patient Card in PiP */}
-        {selectedPrePatient && (
-          <div className="bg-sky-950/90 border-2 border-sky-500 p-2.5 rounded-xl space-y-2 animate-fadeIn">
-            <div className="flex items-center justify-between border-b border-sky-800 pb-1">
-              <span className="text-[10px] font-bold text-sky-300">📋 เปิด OPD จากทะเบียนล่วงหน้า</span>
-              <button onClick={() => setSelectedPrePatient(null)} className="text-slate-400 hover:text-white">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div>
-              <h4 className="font-bold text-xs text-white">{selectedPrePatient.name}</h4>
-              <p className="text-[10px] text-sky-200 font-mono">HN: {selectedPrePatient.hn} | สิทธิ์: {selectedPrePatient.rights}</p>
-            </div>
-            <div className="space-y-1">
-              <span className="text-[9px] text-sky-200 font-bold block">ติ๊ก/ปลดบริการที่รับวันนี้:</span>
-              <div className="flex flex-wrap gap-1">
-                {availableServices.map((srv) => {
-                  const isChecked = preSelectedServices.includes(srv.name);
-                  return (
-                    <button
-                      key={srv.id}
-                      type="button"
-                      onClick={() => {
-                        if (isChecked) {
-                          if (overlayConfig?.allowDeselectServices === false) {
-                            alert('ระบบห้ามติ๊กปลดรายการบริการ');
-                            return;
-                          }
-                          setPreSelectedServices(preSelectedServices.filter((s) => s !== srv.name));
-                        } else {
-                          setPreSelectedServices([...preSelectedServices, srv.name]);
-                        }
-                      }}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                        isChecked
-                          ? 'bg-emerald-500 text-slate-950 font-bold'
-                          : 'bg-slate-800 text-slate-400 border border-slate-700'
-                      }`}
-                    >
-                      {isChecked ? `✓ ${srv.name}` : `+ ${srv.name}`}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <button
-              onClick={handleConfirmOpenOpdFromPre}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-1.5 rounded text-xs shadow transition-colors flex items-center justify-center gap-1 cursor-pointer"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>🟢 ยืนยันเปิด OPD เข้าคิว</span>
-            </button>
-          </div>
-        )}
-
         {/* Station Standby Mode Tabs in PiP */}
-        <div className="bg-slate-800 p-1.5 rounded-lg border border-slate-700 space-y-1">
+        <div className="bg-slate-800/90 p-2 rounded-xl border border-slate-700 space-y-1.5 shadow-sm">
           <div className="flex items-center justify-between text-[10px] font-bold text-amber-300">
-            <span>โหมดสแตนบายแผนก:</span>
+            <span className="flex items-center gap-1">
+              <Activity className="w-3.5 h-3.5 text-amber-400" />
+              <span>โหมดสแตนบายแผนก:</span>
+            </span>
             {stationFilter !== 'all' && (
-              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded font-mono">
-                พร้อม: {readyPatients.length}
+              <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold font-mono">
+                ⚡ คิวพร้อม: {readyPatients.length} ราย
               </span>
             )}
           </div>
           <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
             {[
-              ...orderedStations.map((st) => ({ id: st.key, label: st.label })),
-              { id: 'all', label: '🌐 ทั้งหมด' },
+              ...orderedStations.map((st) => ({ id: st.key, label: st.label, fullName: st.fullName })),
+              { id: 'all', label: '🌐 ทั้งหมด', fullName: 'ทุกแผนก' },
             ].map((st) => {
               const isActive = stationFilter === st.id;
               const count = st.id === 'all'
@@ -842,15 +727,15 @@ export default function SignalOverlay({
                   key={st.id}
                   type="button"
                   onClick={() => setStationFilter(st.id as any)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer border ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap cursor-pointer border ${
                     isActive
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
-                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 font-black shadow-md ring-1 ring-amber-300/50'
+                      : 'bg-slate-900 text-slate-300 border-slate-700/80 hover:bg-slate-750 hover:text-white'
                   }`}
                 >
                   <span>{st.label}</span>
-                  <span className={`text-[9px] px-1 py-0.2 rounded-full font-mono ${
-                    isActive ? 'bg-slate-950/20 text-slate-950 font-extrabold' : 'bg-slate-800 text-amber-300'
+                  <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-mono ${
+                    isActive ? 'bg-slate-950/20 text-slate-950 font-black' : 'bg-slate-800 text-amber-300'
                   }`}>
                     {count}
                   </span>
@@ -865,15 +750,16 @@ export default function SignalOverlay({
           <div className="relative">
             <input
               type="text"
-              placeholder="🔍 เสิร์ช HN / เลขบัตร / ชื่อ..."
+              placeholder="🔍 เสิร์ช HN / เลขบัตร / ชื่อคนไข้..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white placeholder:text-slate-500 outline-none focus:border-amber-500 font-sans"
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 outline-none focus:border-amber-500 font-sans shadow-inner"
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1 text-slate-400 hover:text-white"
+                className="absolute right-2 top-1.5 text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -882,9 +768,9 @@ export default function SignalOverlay({
 
           {/* Search Dropdown in PiP Mode */}
           {cleanSearch !== '' && (
-            <div className="max-h-44 overflow-y-auto bg-slate-900 border border-slate-700 rounded p-1.5 space-y-1 shadow-2xl">
+            <div className="max-h-44 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg p-1.5 space-y-1 shadow-2xl">
               {preMatches.length === 0 && activeMatches.length === 0 && completedMatches.length === 0 ? (
-                <p className="text-[10px] text-slate-500 p-1 text-center">ไม่พบข้อมูลคนไข้ที่ตรงกัน</p>
+                <p className="text-[10px] text-slate-500 p-2 text-center">ไม่พบข้อมูลคนไข้ที่ตรงกัน</p>
               ) : (
                 <>
                   {activeMatches.map((p) => (
@@ -894,13 +780,13 @@ export default function SignalOverlay({
                         setSelectedPatientId(p.id);
                         setSearchQuery('');
                       }}
-                      className="p-1.5 bg-slate-800 hover:bg-amber-950/80 border border-slate-700 rounded cursor-pointer transition-colors flex items-center justify-between text-[11px]"
+                      className="p-2 bg-slate-800 hover:bg-amber-950/80 border border-slate-700 rounded-lg cursor-pointer transition-colors flex items-center justify-between text-xs"
                     >
                       <div>
                         <span className="font-bold text-white block">{p.name} ({p.hn})</span>
-                        <span className="text-[9px] text-emerald-400 font-mono">คิวในระบบ</span>
+                        <span className="text-[10px] text-emerald-400 font-mono">คิวในระบบ</span>
                       </div>
-                      <span className="text-[9px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-bold">เลือกดู</span>
+                      <span className="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold">เลือกดู</span>
                     </div>
                   ))}
                   {completedMatches.map((p) => (
@@ -910,13 +796,13 @@ export default function SignalOverlay({
                         setSelectedPatientId(p.id);
                         setSearchQuery('');
                       }}
-                      className="p-1.5 bg-blue-950/80 hover:bg-blue-900 border border-blue-700 rounded cursor-pointer transition-colors flex items-center justify-between text-[11px]"
+                      className="p-2 bg-blue-950/80 hover:bg-blue-900 border border-blue-700 rounded-lg cursor-pointer transition-colors flex items-center justify-between text-xs"
                     >
                       <div>
                         <span className="font-bold text-blue-200 block">{p.name} ({p.hn})</span>
-                        <span className="text-[9px] text-sky-300 font-mono">💳 ปิดสิทธิ์แล้ว</span>
+                        <span className="text-[10px] text-sky-300 font-mono">💳 ปิดสิทธิ์แล้ว</span>
                       </div>
-                      <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold">แก้ไข</span>
+                      <span className="text-[9px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-bold">แก้ไข</span>
                     </div>
                   ))}
                 </>
@@ -927,17 +813,17 @@ export default function SignalOverlay({
 
         {/* Patient Queue Dropdown Selector in PiP */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
             <span>
               {stationFilter === 'all'
-                ? `เลือกคนไข้คิวปัจจุบัน (${activePatients.length} คน):`
-                : `คิวพร้อมคีย์แผนกนี้ (${visibleQueuePatients.length} คน):`}
+                ? `1. คิวคนไข้ทั้งหมด (${activePatients.length} ราย):`
+                : `1. คิวพร้อมคีย์แผนกนี้ (${visibleQueuePatients.length} ราย):`}
             </span>
           </div>
           <select
             value={currentPatient?.id || ''}
             onChange={(e) => setSelectedPatientId(e.target.value)}
-            className="w-full text-xs bg-slate-800 border border-slate-700 text-white rounded px-2 py-1 outline-none cursor-pointer"
+            className="w-full text-xs bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 outline-none focus:border-sky-500 cursor-pointer shadow-sm"
           >
             {currentPatient && !visibleQueuePatients.some((p) => p.id === currentPatient.id) && (
               <option key={currentPatient.id} value={currentPatient.id}>
@@ -948,7 +834,7 @@ export default function SignalOverlay({
             )}
             {visibleQueuePatients.map((p, idx) => (
               <option key={p.id} value={p.id}>
-                คิว #{idx + 1} - HN: {p.hn} - {p.name}
+                ⚡ คิว #{idx + 1} - HN: {p.hn} - {p.name} ({p.rights})
               </option>
             ))}
           </select>
@@ -956,7 +842,7 @@ export default function SignalOverlay({
 
         {/* Current Active Patient View in PiP */}
         {currentPatient ? (
-          <div className="bg-slate-800 rounded-xl p-2.5 border border-slate-700 space-y-2">
+          <div className="bg-slate-800/90 rounded-xl p-3 border border-slate-700 space-y-2.5 shadow-md">
             {currentPatient.status === 'completed' && (
               <div className="bg-blue-950/90 border border-blue-700/80 rounded-lg p-2 space-y-1 text-xs text-blue-200">
                 <div className="flex items-center justify-between font-bold">
@@ -965,7 +851,7 @@ export default function SignalOverlay({
                 <button
                   type="button"
                   onClick={() => onToggleSignal(currentPatient.id, 'rightsStatus', 'pending')}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 py-1 rounded font-bold text-[11px] shadow cursor-pointer transition-colors flex items-center justify-center gap-1 border border-amber-300"
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 py-1 rounded-lg font-bold text-[11px] shadow cursor-pointer transition-colors flex items-center justify-center gap-1 border border-amber-300"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>↺ ยกเลิกปิดสิทธิ์ / ดึงกลับมาแก้ไข</span>
@@ -973,19 +859,19 @@ export default function SignalOverlay({
               </div>
             )}
 
-            <div className="flex items-center justify-between border-b border-slate-700 pb-1">
-              <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-950 border border-sky-800 px-1.5 py-0.5 rounded">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-1.5">
+              <span className="text-[10px] font-mono font-bold text-sky-400 bg-sky-950 border border-sky-800 px-2 py-0.5 rounded-md">
                 HN: {currentPatient.hn}
               </span>
-              <span className="text-[10px] text-emerald-400 font-bold">
+              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800/80 px-2 py-0.5 rounded-md">
                 {currentPatient.status === 'completed' ? '💳 สิ้นสุดบริการ' : `คิวที่ #${currentQueueIndex}`}
               </span>
             </div>
 
-            <div className="bg-slate-900/90 p-2 rounded-lg border border-slate-700/80 space-y-1.5 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-1">
-                <h4 className="font-bold text-xs text-white truncate max-w-[190px]">{currentPatient.name}</h4>
-                <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800 shrink-0">
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-700/80 space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <h4 className="font-bold text-xs text-white truncate max-w-[200px]">{currentPatient.name}</h4>
+                <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/90 px-2 py-0.5 rounded-full border border-emerald-700 shrink-0">
                   สิทธิ์: {currentPatient.rights}
                 </span>
               </div>
@@ -995,7 +881,7 @@ export default function SignalOverlay({
                   <span>🆔 เลขบัตร: <strong className="text-white">{currentPatient.citizenId || '-'}</strong></span>
                   <span>อายุ: <strong className="text-white">{currentPatient.age || '-'} ปี</strong></span>
                 </div>
-                <div className="grid grid-cols-2 gap-1 pt-1 border-t border-slate-800 text-[10px]">
+                <div className="grid grid-cols-2 gap-1.5 pt-1.5 border-t border-slate-800 text-[10px]">
                   <span className="text-emerald-300 font-bold">⚖️ น้ำหนัก: <strong className="text-white">{currentPatient.weight ? `${currentPatient.weight} kg` : '-'}</strong></span>
                   <span className="text-emerald-300 font-bold">📏 ส่วนสูง: <strong className="text-white">{currentPatient.height ? `${currentPatient.height} cm` : '-'}</strong></span>
                   <span className="text-amber-300 font-bold">🩺 BP: <strong className="text-white">{currentPatient.bloodPressure || '-'}</strong></span>
@@ -1031,7 +917,7 @@ export default function SignalOverlay({
                   <button
                     type="button"
                     onClick={handlePrimaryClick}
-                    className={`w-full py-2 px-2.5 rounded-lg font-black text-xs shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer border ${
+                    className={`w-full py-2.5 px-3 rounded-xl font-black text-xs shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
                       isDone
                         ? 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400'
                         : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400 animate-pulse'
@@ -1049,77 +935,83 @@ export default function SignalOverlay({
             )}
 
             {/* Department Quick Buttons in PiP */}
-            <div className="grid grid-cols-2 gap-1 pt-1 border-t border-slate-700">
-              {orderedStations.filter((st) => isButtonEnabled(st.key) || isButtonEnabled(st.originalStep?.id || '')).map((st) => {
-                const step = st.originalStep;
-                const stepId = step?.id || st.key;
-                const isAllowed = isActionAllowedForStation(st.key) || isActionAllowedForStation(stepId);
-                const actionType = step?.actionType || overlayConfig?.actionTypes?.[stepId] || (st.key === 'rightsStatus' || step?.name.includes('ปิดสิทธิ์') ? 'close_rights_discharge' : 'step_complete');
+            <div className="space-y-1 pt-1 border-t border-slate-700">
+              <span className="text-[10px] text-slate-400 font-bold uppercase block">2. ปุ่มส่งสัญญาณสเตชั่นแผนก:</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {orderedStations.filter((st) => isButtonEnabled(st.key) || isButtonEnabled(st.originalStep?.id || '')).map((st) => {
+                  const step = st.originalStep;
+                  const stepId = step?.id || st.key;
+                  const isAllowed = isActionAllowedForStation(st.key) || isActionAllowedForStation(stepId);
+                  const actionType = step?.actionType || overlayConfig?.actionTypes?.[stepId] || (st.key === 'rightsStatus' || step?.name.includes('ปิดสิทธิ์') ? 'close_rights_discharge' : 'step_complete');
 
-                let isDone = false;
-                if (st.key === 'opdStatus') isDone = currentPatient.opdStatus === 'opened';
-                else if (st.key === 'labStatus') isDone = currentPatient.labStatus === 'opened' || currentPatient.labStatus === 'done';
-                else if (st.key === 'procedureStatus') isDone = currentPatient.procedureStatus === 'sent' || currentPatient.procedureStatus === 'done';
-                else if (st.key === 'rightsStatus') isDone = currentPatient.rightsStatus === 'closed';
-                else if (step) {
-                  isDone = (currentPatient.history || []).some(h => h.stepId === step.id || h.stepName === step.name) ||
-                    (currentPatient as any)[step.id] === 'opened' ||
-                    (currentPatient as any)[step.id] === 'done' ||
-                    (currentPatient as any)[step.id] === 'closed';
-                }
-
-                const handleClick = () => {
-                  if (!isAllowed) {
-                    alert(`🔒 สิทธิ์ถูกจำกัด\nแผนกที่คุณเลือกอยู่ไม่ได้ถูกตั้งค่าให้ส่งสัญญาณ "${st.fullName}"\n(สามารถปรับสิทธิ์ได้ใน Settings)`);
-                    return;
+                  let isDone = false;
+                  if (st.key === 'opdStatus') isDone = currentPatient.opdStatus === 'opened';
+                  else if (st.key === 'labStatus') isDone = currentPatient.labStatus === 'opened' || currentPatient.labStatus === 'done';
+                  else if (st.key === 'procedureStatus') isDone = currentPatient.procedureStatus === 'sent' || currentPatient.procedureStatus === 'done';
+                  else if (st.key === 'rightsStatus') isDone = currentPatient.rightsStatus === 'closed';
+                  else if (step) {
+                    isDone = (currentPatient.history || []).some(h => h.stepId === step.id || h.stepName === step.name) ||
+                      (currentPatient as any)[step.id] === 'opened' ||
+                      (currentPatient as any)[step.id] === 'done' ||
+                      (currentPatient as any)[step.id] === 'closed';
                   }
 
-                  if (actionType === 'close_rights_discharge' || st.key === 'rightsStatus') {
-                    handleCloseRightsAndAdvance(currentPatient, stepId);
-                  } else {
-                    const nextVal = isDone ? 'pending' : (st.key === 'procedureStatus' ? 'sent' : 'opened');
-                    if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, st.key as any)) return;
-                    onToggleSignal(currentPatient.id, (stepId || st.key) as any, nextVal);
-                  }
-                };
+                  const handleClick = () => {
+                    if (!isAllowed) {
+                      alert(`🔒 สิทธิ์ถูกจำกัด\nแผนกที่คุณเลือกอยู่ไม่ได้ถูกตั้งค่าให้ส่งสัญญาณ "${st.fullName}"\n(สามารถปรับสิทธิ์ได้ใน Settings)`);
+                      return;
+                    }
 
-                const isFullWidth = actionType === 'close_rights_discharge' || st.key === 'rightsStatus';
+                    if (actionType === 'close_rights_discharge' || st.key === 'rightsStatus') {
+                      handleCloseRightsAndAdvance(currentPatient, stepId);
+                    } else {
+                      const nextVal = isDone ? 'pending' : (st.key === 'procedureStatus' ? 'sent' : 'opened');
+                      if (nextVal !== 'pending' && !checkActionPrerequisite(currentPatient, st.key as any)) return;
+                      onToggleSignal(currentPatient.id, (stepId || st.key) as any, nextVal);
+                    }
+                  };
 
-                return (
-                  <button
-                    key={st.key}
-                    onClick={handleClick}
-                    className={`p-1.5 rounded text-center text-[10px] font-bold border transition-colors ${
-                      isFullWidth ? 'col-span-2' : ''
-                    } ${
-                      !isAllowed
-                        ? 'opacity-40 bg-slate-950 border-slate-800 text-slate-500 cursor-not-allowed'
-                        : isDone
-                        ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-900 border-slate-700 text-slate-400'
-                    }`}
-                  >
-                    {st.defaultIcon} {st.label}: {!isAllowed ? '🔒 ล็อค' : isDone ? (st.key === 'rightsStatus' ? '💳 เสร็จ' : '🟢 เสร็จ') : (st.key === 'rightsStatus' ? '⚪ ปิดสิทธิ์' : '⚪ ส่ง')}
-                  </button>
-                );
-              })}
+                  const isFullWidth = actionType === 'close_rights_discharge' || st.key === 'rightsStatus';
+
+                  return (
+                    <button
+                      key={st.key}
+                      onClick={handleClick}
+                      className={`p-2 rounded-xl text-center text-[11px] font-bold border transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer ${
+                        isFullWidth ? 'col-span-2' : ''
+                      } ${
+                        !isAllowed
+                          ? 'opacity-40 bg-slate-950 border-slate-800 text-slate-500 cursor-not-allowed'
+                          : isDone
+                          ? 'bg-emerald-600/30 border-emerald-500 text-emerald-300 font-extrabold shadow'
+                          : 'bg-slate-900 border-slate-700/80 text-slate-300 hover:bg-slate-750 hover:text-white'
+                      }`}
+                    >
+                      <span>{st.defaultIcon}</span>
+                      <span>{st.label}:</span>
+                      <span>{!isAllowed ? '🔒' : isDone ? (st.key === 'rightsStatus' ? '💳 เสร็จ' : '🟢 เสร็จ') : (st.key === 'rightsStatus' ? '⚪ ปิดสิทธิ์' : '⚪ ส่ง')}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Service Tags with Check/Uncheck in PiP */}
             {isButtonEnabled('requestedServices') && availableServices.length > 0 && (
-              <div className="pt-1.5 border-t border-slate-700 space-y-1">
-                <span className="text-[9px] text-slate-400 font-bold uppercase block">บริการส่งซิก (คลิกติ๊ก/ปลดออก):</span>
-                <div className="flex flex-wrap gap-1">
+              <div className="pt-2 border-t border-slate-700 space-y-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">บริการพิเศษ (คลิกเพื่อติ๊ก/ปลดออก):</span>
+                <div className="flex flex-wrap gap-1.5">
                   {availableServices.map((srv) => {
                     const isSelected = (currentPatient.requestedServices || []).includes(srv.name);
                     return (
                       <button
                         key={srv.id}
+                        type="button"
                         onClick={() => handleToggleService(currentPatient, srv.name)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                        className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-sky-500 text-slate-950 shadow-xs'
-                            : 'bg-slate-900 text-slate-400 border border-slate-700'
+                            ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                            : 'bg-slate-900 text-slate-300 border border-slate-700 hover:bg-slate-750'
                         }`}
                       >
                         {isSelected ? `✓ ${srv.name}` : `+ ${srv.name}`}
@@ -1129,9 +1021,30 @@ export default function SignalOverlay({
                 </div>
               </div>
             )}
+
+            {/* Quick Notes Text Box in PiP */}
+            {isButtonEnabled('quickNotes') && (
+              <div className="pt-2 border-t border-slate-700 space-y-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">ข้อความส่งซิกด่วน:</span>
+                <input
+                  type="text"
+                  placeholder="พิมพ์ข้อความส่งซิกด่วน..."
+                  defaultValue={currentPatient.quickNotes || ''}
+                  key={currentPatient.id + '_notes_' + (currentPatient.quickNotes || '')}
+                  onBlur={(e) => onUpdateNotes(currentPatient.id, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      onUpdateNotes(currentPatient.id, e.currentTarget.value);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-200 placeholder:text-slate-500 outline-none focus:border-amber-400 font-sans"
+                />
+              </div>
+            )}
           </div>
         ) : (
-          <p className="text-center text-slate-500 py-3 italic">ไม่มีคนไข้ในคิวขณะนี้</p>
+          <p className="text-center text-slate-500 py-4 italic text-xs">ไม่มีคนไข้ในคิวส่งซิกขณะนี้</p>
         )}
       </div>
     );

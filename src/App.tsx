@@ -727,7 +727,6 @@ export default function App() {
 
     // Optimistically insert locally so user sees it right away
     setPatients(prev => [newPatient, ...prev]);
-    setActiveTab('queues');
 
     try {
       await setDoc(doc(db, 'patients', id), newPatient);
