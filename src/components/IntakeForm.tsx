@@ -84,6 +84,8 @@ export default function IntakeForm({
   const genderRef = useRef<HTMLDivElement>(null);
   const weightRef = useRef<HTMLInputElement>(null);
   const heightRef = useRef<HTMLInputElement>(null);
+  const bpRef = useRef<HTMLInputElement>(null);
+  const pulseRef = useRef<HTMLInputElement>(null);
   const servicesRef = useRef<HTMLDivElement>(null);
 
   // Calculate BMI whenever weight or height changes
@@ -232,6 +234,14 @@ export default function IntakeForm({
       newErrors.height = 'กรุณากรอกส่วนสูง (ซม.) ให้ถูกต้อง';
     }
 
+    if (!bpSystolic.trim() || !bpDiastolic.trim()) {
+      newErrors.bloodPressure = 'กรุณากรอกความดันโลหิตให้ครบถ้วน (ตัวบน SYS และ ตัวล่าง DIA)';
+    }
+
+    if (pulseRate === '' || pulseRate === undefined || isNaN(Number(pulseRate)) || Number(pulseRate) <= 0) {
+      newErrors.pulseRate = 'กรุณากรอกอัตราการเต้นหัวใจ / ชีพจร';
+    }
+
     if (selectedServices.length === 0) {
       newErrors.services = 'กรุณาติ๊กเลือกอย่างน้อย 1 รายการบริการที่คนไข้ต้องรับบริการ';
     }
@@ -261,6 +271,12 @@ export default function IntakeForm({
       } else if (firstKey === 'height' && heightRef.current) {
         heightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
         heightRef.current.focus();
+      } else if (firstKey === 'bloodPressure' && bpRef.current) {
+        bpRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        bpRef.current.focus();
+      } else if (firstKey === 'pulseRate' && pulseRef.current) {
+        pulseRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        pulseRef.current.focus();
       } else if (firstKey === 'services' && servicesRef.current) {
         servicesRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -732,17 +748,25 @@ export default function IntakeForm({
             {/* Blood Pressure */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                ความดันโลหิต (mmHg)
+                ความดันโลหิต (mmHg) <span className="text-rose-500">*</span>
               </label>
               <div className="flex items-center gap-1.5">
                 <div className="relative flex-1">
                   <Activity className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
+                    ref={bpRef}
                     type="number"
                     placeholder="127"
                     value={bpSystolic}
-                    onChange={(e) => setBpSystolic(e.target.value)}
-                    className="w-full pl-7 pr-1 py-2 rounded-xl border border-slate-300 focus:border-sky-500 bg-white text-xs font-mono font-bold transition-all outline-none text-center"
+                    onChange={(e) => {
+                      setBpSystolic(e.target.value);
+                      if (errors.bloodPressure) setErrors((prev) => ({ ...prev, bloodPressure: '' }));
+                    }}
+                    className={`w-full pl-7 pr-1 py-2 rounded-xl border text-xs font-mono font-bold transition-all outline-none text-center ${
+                      errors.bloodPressure
+                        ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
+                        : 'border-slate-300 focus:border-sky-500 bg-white'
+                    }`}
                   />
                 </div>
                 <span className="text-sm font-bold text-slate-400 select-none">/</span>
@@ -751,8 +775,15 @@ export default function IntakeForm({
                     type="number"
                     placeholder="67"
                     value={bpDiastolic}
-                    onChange={(e) => setBpDiastolic(e.target.value)}
-                    className="w-full px-2 py-2 rounded-xl border border-slate-300 focus:border-sky-500 bg-white text-xs font-mono font-bold transition-all outline-none text-center"
+                    onChange={(e) => {
+                      setBpDiastolic(e.target.value);
+                      if (errors.bloodPressure) setErrors((prev) => ({ ...prev, bloodPressure: '' }));
+                    }}
+                    className={`w-full px-2 py-2 rounded-xl border text-xs font-mono font-bold transition-all outline-none text-center ${
+                      errors.bloodPressure
+                        ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
+                        : 'border-slate-300 focus:border-sky-500 bg-white'
+                    }`}
                   />
                 </div>
               </div>
@@ -761,24 +792,34 @@ export default function IntakeForm({
                 <span>/</span>
                 <span>DIA (ตัวล่าง)</span>
               </div>
+              {errors.bloodPressure && <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.bloodPressure}</p>}
             </div>
 
             {/* Pulse Rate */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                ชีพจร (bpm)
+                ชีพจร (bpm) <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <HeartPulse className="w-4 h-4 text-rose-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
+                  ref={pulseRef}
                   type="number"
                   placeholder="เช่น 72"
                   value={pulseRate}
-                  onChange={(e) => setPulseRate(e.target.value === '' ? '' : Number(e.target.value))}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 focus:border-sky-500 bg-white text-xs font-mono font-bold transition-all outline-none"
+                  onChange={(e) => {
+                    setPulseRate(e.target.value === '' ? '' : Number(e.target.value));
+                    if (errors.pulseRate) setErrors((prev) => ({ ...prev, pulseRate: '' }));
+                  }}
+                  className={`w-full pl-9 pr-3 py-2 rounded-xl border text-xs font-mono font-bold transition-all outline-none ${
+                    errors.pulseRate
+                      ? 'border-rose-500 bg-rose-50 ring-2 ring-rose-200'
+                      : 'border-slate-300 focus:border-sky-500 bg-white'
+                  }`}
                 />
               </div>
               <span className="text-[9px] text-slate-400 font-mono">ครั้ง / นาที</span>
+              {errors.pulseRate && <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.pulseRate}</p>}
             </div>
 
             {/* Live Calculated BMI Display */}

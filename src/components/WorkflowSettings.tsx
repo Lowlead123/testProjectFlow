@@ -67,6 +67,25 @@ export default function WorkflowSettings({
   const [passcodeSuccess, setPasscodeSuccess] = useState('');
   const [passcodeError, setPasscodeError] = useState('');
 
+  // New Service Tag State
+  const [newServiceName, setNewServiceName] = useState('');
+  const [serviceError, setServiceError] = useState('');
+
+  const handleAddServiceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setServiceError('');
+    if (!newServiceName.trim()) {
+      setServiceError('กรุณาระบุชื่อรายการบริการ');
+      return;
+    }
+    if (availableServices.some((s) => s.name.trim().toLowerCase() === newServiceName.trim().toLowerCase())) {
+      setServiceError('มีรายการบริการชื่อนี้ในระบบแล้ว');
+      return;
+    }
+    onAddService(newServiceName.trim());
+    setNewServiceName('');
+  };
+
   const handleChangePasscode = (e: React.FormEvent) => {
     e.preventDefault();
     setPasscodeError('');
@@ -641,6 +660,96 @@ export default function WorkflowSettings({
               <Plus className="w-4 h-4" />
               <span>เพิ่มเข้าในเวิร์กโฟลว์</span>
             </button>
+          </form>
+        </div>
+      </div>
+
+      {/* SERVICE TAGS MANAGEMENT SECTION */}
+      <div className="mt-8 border-t border-gray-200 pt-6">
+        <div className="bg-gradient-to-r from-indigo-50/60 to-purple-50/60 border border-indigo-200 rounded-2xl p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 pb-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-indigo-600 text-white rounded-xl shadow-xs">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-sans font-bold text-sm text-slate-800">
+                  ตั้งค่ารายการบริการที่จุดคัดกรอง / รายการบริการส่งซิกพิเศษ <span className="text-rose-500">*</span>
+                </h3>
+                <p className="text-[11px] text-slate-500 font-sans">
+                  (Requested Services & Planned Clinical Signals คือชุดข้อมูลเดียวกัน สามารถเพิ่ม ลบ หรือแก้ไขรายการได้)
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-mono font-semibold bg-indigo-100 text-indigo-800 px-2.5 py-1 rounded-full self-start sm:self-auto">
+              ทั้งหมด {availableServices.length} รายการ
+            </span>
+          </div>
+
+          {/* Service Tag Badges Grid */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold text-slate-700 font-sans">
+              รายการบริการที่มีในระบบปัจจุบัน (คลิกปุ่มถังขยะเพื่อลบออก):
+            </label>
+
+            {availableServices.length === 0 ? (
+              <div className="p-4 bg-white/80 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-400 font-sans">
+                ยังไม่มีรายการบริการในระบบ กรุณาพิมพ์ชื่อเพื่อเพิ่มรายการบริการใหม่ด้านล่าง
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 max-h-52 overflow-y-auto p-1">
+                {availableServices.map((srv) => (
+                  <div
+                    key={srv.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-indigo-200/80 rounded-xl text-xs font-semibold text-slate-700 shadow-2xs hover:border-indigo-300 transition-all group"
+                  >
+                    <span>{srv.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`คุณต้องการลบรายการบริการ "${srv.name}" ใช่หรือไม่?`)) {
+                          onDeleteService(srv.id);
+                        }
+                      }}
+                      className="p-0.5 rounded-md hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                      title={`ลบ ${srv.name}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Form to Add New Service Tag */}
+          <form onSubmit={handleAddServiceSubmit} className="pt-2 border-t border-indigo-100">
+            <label htmlFor="newServiceName" className="block text-xs font-bold text-slate-700 mb-1.5 font-sans">
+              เพิ่มรายการบริการใหม่:
+            </label>
+            <div className="flex flex-col sm:flex-row items-stretch gap-2">
+              <input
+                id="newServiceName"
+                type="text"
+                placeholder="พิมพ์ชื่อบริการ เช่น เจาะเลือด LAB, X-Ray, ทำแผล, ECG 12-Leads, ฉีดยา, พ่นยา..."
+                value={newServiceName}
+                onChange={(e) => {
+                  setNewServiceName(e.target.value);
+                  if (serviceError) setServiceError('');
+                }}
+                className="flex-1 font-sans text-xs px-3.5 py-2 rounded-xl border border-indigo-200 bg-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all"
+              />
+              <button
+                type="submit"
+                className="bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-sans font-bold text-xs px-4 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>เพิ่มรายการบริการ</span>
+              </button>
+            </div>
+            {serviceError && (
+              <p className="text-rose-600 font-bold text-xs mt-1.5 font-sans">{serviceError}</p>
+            )}
           </form>
         </div>
       </div>
